@@ -1,0 +1,6 @@
+# Official Anthropic assets - downloaded by download-assets.ps1, never committed
+assets/
+
+# Windows junk
+Thumbs.db
+desktop.ini
