@@ -1724,12 +1724,23 @@ function Render-Status {
     $ia.Dispose()
     # Spark like the Claude Code loading (the "live" indicator); done already has a checkmark
     if ($tok -ne 'done') {
-        # The spark throbs: arms grow out to full and shrink back down to a single dot (a
-        # heartbeat-style pulse) while the color stays bright, so it beats instead of fading
-        # into darkness. $vis only carries the bubble's own appear/disappear fade. Arm length
-        # swings ~0.05..1.0 over ~0.8s, so the small end is just a dot.
-        $pulse = 0.5 + 0.5 * [Math]::Sin($script:globalT * 0.13)
-        $scale = [single](0.05 + 0.95 * $pulse)
+        # The spark throbs: it RESTS at full size for ~0.5s, then a quick dip down to a single
+        # dot and straight back up (a heartbeat-style beat) while the color stays bright. Tweak
+        # the three tick counts below to taste (1 second ~= 62 ticks) and the 0.05..1.0 range
+        # for how small/big the dot and the full spark get.
+        $holdTicks = 8.0   # how long it stays at full size between beats
+        $dipTicks  = 8.0    # how fast it shrinks down to a dot (smaller = faster)
+        $riseTicks = 8.0    # how fast it grows back up to full
+        $period = $holdTicks + $dipTicks + $riseTicks
+        $ph = $script:globalT % $period
+        if ($ph -lt $holdTicks) {
+            $p = 1.0                                                                  # hold at full
+        } elseif ($ph -lt ($holdTicks + $dipTicks)) {
+            $f = ($ph - $holdTicks) / $dipTicks;            $p = 1.0 - ($f * $f * (3.0 - 2.0 * $f))   # full -> dot (eased)
+        } else {
+            $f = ($ph - $holdTicks - $dipTicks) / $riseTicks; $p = $f * $f * (3.0 - 2.0 * $f)         # dot -> full (eased)
+        }
+        $scale = [single](0.05 + 0.95 * $p)
         $a = [int](255 * $vis)
         if ($a -gt 0) {
             $iy = [single](($bh - $script:statusTail) / 2.0)
@@ -1768,6 +1779,53 @@ $script:timer.Add_Tick({
             $script:balForm.Hide()
             $script:balEscape = $false
         }
+    }
+
+    # ===== Claude Watch: read the status & show the bubble above the head =====
+    # Runs up HERE, before the state-machine early-returns below, so the bubble can never
+    # freeze in place when a heavy animation (balloon, meteor, push, climb, fall...) takes
+    # over: the moment Clawd leaves a calm pose the bubble hides, and it only returns once
+    # he's back in a normal pose.
+    if ($script:featWatch) {
+        $script:watchCheck++
+        if ($script:watchCheck -ge 10) {   # ~6x / second
+            $script:watchCheck = 0
+            try {
+                if ([System.IO.File]::Exists($script:watchFile)) {
+                    $script:watchAge = ([DateTime]::Now - [System.IO.File]::GetLastWriteTime($script:watchFile)).TotalSeconds
+                    $tk = ([System.IO.File]::ReadAllText($script:watchFile)).Trim().ToLowerInvariant()
+                    if ($tk) {
+                        if ($tk -eq 'done' -and $script:watchTok -ne 'done') {
+                            # Fresh finish: pick a random playful verb + timestamp (like Claude Code)
+                            $v = $script:doneVerbs[$script:rand.Next($script:doneVerbs.Count)]
+                            $script:doneMsg = "$v at $([DateTime]::Now.ToString('HH:mm'))"
+                            # Hop for joy so the finish is noticeable - only from a safe, calm pose
+                            if (($script:state -eq 'idle' -or $script:state -eq 'walk') -and $script:fx -eq 'none' -and -not $script:dragging -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none') {
+                                Set-State 'jump' 190
+                            }
+                        }
+                        $script:watchTok = $tk
+                    }
+                } else {
+                    $script:watchAge = 999.0
+                }
+            } catch { }
+        }
+        # Keep the bubble up through the small everyday animations: idle (incl. walk and brief
+        # fx like hop / look-around), wave, hide (duck), and jump. Still hidden during the big
+        # "performances" (dance, sleep) and the special modes (dragging, balloon, meteor shower,
+        # shadow); heavier states (fall/climb/push/code/...) fall out by not being whitelisted.
+        $gentleIdle = ((($script:state -eq 'idle') -or ($script:state -eq 'walk')) -and ($script:fx -ne 'dance') -and ($script:fx -ne 'doze'))
+        $calmPose = (($gentleIdle -or ($script:state -eq 'wave') -or ($script:state -eq 'jump')) -and (-not $script:dragging) -and ($script:balMode -eq 'none') -and (-not $script:starActive) -and ($script:shMode -eq 'none'))
+        $maxAge = if ($script:watchTok -eq 'done') { 8.0 } else { 15.0 }
+        $fresh  = ($script:watchTok -and ($script:watchAge -lt $maxAge))
+        $target = if ($calmPose -and $fresh) { 1.0 } else { 0.0 }
+        $script:watchVis += ($target - $script:watchVis) * 0.09   # slow enough to read the fade
+        if ($script:watchVis -lt 0.02 -and $target -eq 0.0) { $script:watchVis = 0 }
+        # Only draw while still in a calm pose; if a heavy animation took over, hide at once
+        # (no trailing/freezing). watchVis keeps easing to 0 so it fades back in cleanly later.
+        if ($calmPose -and $script:watchVis -gt 0.001) { Render-Status }
+        elseif ($script:statusOv.Visible) { $script:statusOv.Hide() }
     }
 
     # Shooting-star show: update + render; cancel if its state gets taken over by another action
@@ -2549,47 +2607,6 @@ $script:timer.Add_Tick({
     # breathing & eye motion are too slow to tell the difference
     $calm = ($script:state -eq 'idle' -and $script:fx -eq 'none' -and $script:qmTicks -le 0 -and -not $script:dragging)
     if (-not $calm -or ($script:globalT % 2) -eq 0) { Update-PetVisual }
-
-    # ===== Claude Watch: read the status & show the bubble above the head =====
-    if ($script:featWatch) {
-        $script:watchCheck++
-        if ($script:watchCheck -ge 10) {   # ~6x / second
-            $script:watchCheck = 0
-            try {
-                if ([System.IO.File]::Exists($script:watchFile)) {
-                    $script:watchAge = ([DateTime]::Now - [System.IO.File]::GetLastWriteTime($script:watchFile)).TotalSeconds
-                    $tk = ([System.IO.File]::ReadAllText($script:watchFile)).Trim().ToLowerInvariant()
-                    if ($tk) {
-                        if ($tk -eq 'done' -and $script:watchTok -ne 'done') {
-                            # Fresh finish: pick a random playful verb + timestamp (like Claude Code)
-                            $v = $script:doneVerbs[$script:rand.Next($script:doneVerbs.Count)]
-                            $script:doneMsg = "$v at $([DateTime]::Now.ToString('HH:mm'))"
-                            # Hop for joy so the finish is noticeable - only from a safe, calm pose
-                            if (($script:state -eq 'idle' -or $script:state -eq 'walk') -and $script:fx -eq 'none' -and -not $script:dragging -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none') {
-                                Set-State 'jump' 190
-                            }
-                        }
-                        $script:watchTok = $tk
-                    }
-                } else {
-                    $script:watchAge = 999.0
-                }
-            } catch { }
-        }
-        # Keep the bubble up through the small everyday animations: idle (incl. walk and brief
-        # fx like hop / look-around), wave, hide (duck), and jump. Still hidden during the big
-        # "performances" (dance, sleep) and the special modes (dragging, balloon, meteor shower,
-        # shadow); heavier states (fall/climb/push/code/...) fall out by not being whitelisted.
-        $gentleIdle = ((($script:state -eq 'idle') -or ($script:state -eq 'walk')) -and ($script:fx -ne 'dance') -and ($script:fx -ne 'doze'))
-        $calmPose = (($gentleIdle -or ($script:state -eq 'wave') -or ($script:state -eq 'jump')) -and (-not $script:dragging) -and ($script:balMode -eq 'none') -and (-not $script:starActive) -and ($script:shMode -eq 'none'))
-        $maxAge = if ($script:watchTok -eq 'done') { 8.0 } else { 15.0 }
-        $fresh  = ($script:watchTok -and ($script:watchAge -lt $maxAge))
-        $target = if ($calmPose -and $fresh) { 1.0 } else { 0.0 }
-        $script:watchVis += ($target - $script:watchVis) * 0.09   # slow enough to read the fade
-        if ($script:watchVis -lt 0.02 -and $target -eq 0.0) { $script:watchVis = 0 }
-        if ($script:watchVis -gt 0.001) { Render-Status }
-        elseif ($script:statusOv.Visible) { $script:statusOv.Hide() }
-    }
 
     $script:topCnt++
     if ($script:topCnt -ge 600) { $script:topCnt = 0; $script:form.TopMost = $true }
