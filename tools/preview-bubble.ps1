@@ -1,5 +1,5 @@
-# Pratinjau visual gelembung "Claude Watch" — render semua state ke satu PNG.
-# Menyalin logika Build-StatusBubble dari clawd-pet.ps1 (titik denyut digambar statis di sini).
+# Visual preview of the "Claude Watch" bubble — renders every state into one PNG.
+# Mirrors the Build-StatusBubble logic from clawd-pet.ps1 (the throbbing spark is drawn static here).
 Add-Type -AssemblyName System.Drawing
 
 $termBrush     = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(40, 38, 35))
@@ -22,21 +22,19 @@ function New-RoundRect([single]$x, [single]$y, [single]$w, [single]$h, [single]$
     $p.AddArc(($x + $w - $d), ($y + $h - $d), $d, $d, 0, 90); $p.AddArc($x, ($y + $h - $d), $d, $d, 90, 90)
     $p.CloseFigure(); return $p
 }
-function Draw-ClaudeSpark($g, [single]$cx, [single]$cy, [int]$alpha) {
+function Draw-ClaudeSpark($g, [single]$cx, [single]$cy, [int]$alpha, [single]$scale) {
     $col = [System.Drawing.Color]::FromArgb($alpha, 217, 119, 87)
-    $br = New-Object System.Drawing.SolidBrush $col
+    $pen = New-Object System.Drawing.Pen $col, ([single]1.5)
+    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $pen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
     $st = $g.Save(); $g.SmoothingMode = 'AntiAlias'; $g.TranslateTransform($cx, $cy)
-    $r=[single]5.0; $wid=[single]($r*0.26); $waist=[single]($r*0.34)
-    $spike = New-Object 'System.Drawing.PointF[]' 4
-    foreach ($ang in 90, 270, 45, 135, 225, 315) {
-        $s=$g.Save(); $g.RotateTransform([single]$ang)
-        $spike[0]=New-Object System.Drawing.PointF 0,0
-        $spike[1]=New-Object System.Drawing.PointF $waist,(-$wid)
-        $spike[2]=New-Object System.Drawing.PointF $r,0
-        $spike[3]=New-Object System.Drawing.PointF $waist,$wid
-        $g.FillPolygon($br,$spike); $g.Restore($s)
+    $r = [single](5.0 * $scale)
+    foreach ($ang in 30, 90, 150) {
+        $rad = $ang * [Math]::PI / 180.0
+        $dx  = [single]($r * [Math]::Cos($rad)); $dy = [single]($r * [Math]::Sin($rad))
+        $g.DrawLine($pen, (-$dx), (-$dy), $dx, $dy)
     }
-    $g.Restore($st); $br.Dispose()
+    $g.Restore($st); $pen.Dispose()
 }
 function Build([string]$tok) {
     $txt = $text[$tok]; $done = ($tok -eq 'done')
@@ -63,7 +61,7 @@ function Build([string]$tok) {
         $g.DrawLines($cp, @((New-Object System.Drawing.PointF 8, $iy), (New-Object System.Drawing.PointF 11, ($iy + 3)), (New-Object System.Drawing.PointF 16, ($iy - 4))))
         $cp.Dispose()
     } else {
-        Draw-ClaudeSpark $g 14 $iy 255
+        Draw-ClaudeSpark $g 14 $iy 255 1.0
     }
     $g.DrawString($txt, $font, $termTextBrush, [single]($padL - 2), [single](($h - $th) / 2.0), $fmt); $g.Dispose()
     return $bmp
@@ -76,7 +74,7 @@ $gap = 14; $padOut = 24
 $totalH = $padOut * 2 + (($bubbles | ForEach-Object { $_.Height } | Measure-Object -Sum).Sum) + $gap * ($bubbles.Count - 1)
 $canvas = New-Object System.Drawing.Bitmap ([int]($maxW + $padOut * 2)), ([int]$totalH)
 $cg = [System.Drawing.Graphics]::FromImage($canvas)
-$cg.Clear([System.Drawing.Color]::FromArgb(28, 26, 24))   # latar gelap desktop
+$cg.Clear([System.Drawing.Color]::FromArgb(28, 26, 24))   # dark desktop backdrop
 $y = $padOut
 foreach ($b in $bubbles) {
     $cg.DrawImage($b, [int](($canvas.Width - $b.Width) / 2), [int]$y)

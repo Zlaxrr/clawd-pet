@@ -1,7 +1,5 @@
 # Clawd Pet
 
-> [Baca versi Bahasa Indonesia](README.id.md)
-
 A little crab named **Clawd** who lives on your Windows taskbar. He walks around, follows your cursor, and you can pick him up and throw him. That's the basic idea. I built it in plain PowerShell + WinForms, so there's nothing to install and nothing to build. One script, one crab.
 
 ![demo](docs/demo.gif)

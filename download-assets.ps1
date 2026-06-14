@@ -1,6 +1,6 @@
-# Mengunduh aset animasi resmi Clawd dari claude.ai ke folder assets\.
-# Aset adalah milik Anthropic — repo ini tidak menyertakannya; script ini
-# mengunduhnya langsung dari sumber resminya saat instalasi.
+# Downloads the official Clawd animation assets from claude.ai into the assets\ folder.
+# The assets belong to Anthropic — this repo does not bundle them; this script
+# pulls them straight from the official source at install time.
 
 $ErrorActionPreference = 'Stop'
 $assetDir = Join-Path $PSScriptRoot 'assets'
@@ -13,10 +13,10 @@ $files = @('Clawd-Still.png', 'Clawd-CrabWalking.gif', 'Clawd-Waving.gif', 'Claw
 $ok = 0
 foreach ($f in $files) {
     $dest = Join-Path $assetDir $f
-    if (Test-Path $dest) { Write-Host "[lewati] $f sudah ada"; $ok++; continue }
-    Write-Host "[unduh] $f ..."
+    if (Test-Path $dest) { Write-Host "[skip] $f already exists"; $ok++; continue }
+    Write-Host "[download] $f ..."
     $done = $false
-    # Coba curl.exe dulu (bawaan Windows 10/11), lalu Invoke-WebRequest
+    # Try curl.exe first (built into Windows 10/11), then fall back to Invoke-WebRequest
     try {
         & curl.exe -s -S --max-time 40 -A $ua -o $dest ($base + $f)
         if ((Test-Path $dest) -and (Get-Item $dest).Length -gt 5000) { $done = $true }
@@ -32,15 +32,15 @@ foreach ($f in $files) {
         $ok++
     } else {
         if (Test-Path $dest) { Remove-Item $dest -Force }
-        Write-Host "  GAGAL mengunduh $f" -ForegroundColor Red
+        Write-Host "  FAILED to download $f" -ForegroundColor Red
     }
 }
 
 Write-Host ""
 if ($ok -eq $files.Count) {
-    Write-Host "Semua aset siap ($ok/$($files.Count))." -ForegroundColor Green
+    Write-Host "All assets ready ($ok/$($files.Count))." -ForegroundColor Green
     exit 0
 } else {
-    Write-Host "Selesai sebagian: $ok/$($files.Count). Jalankan ulang script ini atau periksa koneksi internet." -ForegroundColor Yellow
+    Write-Host "Partially done: $ok/$($files.Count). Re-run this script or check your internet connection." -ForegroundColor Yellow
     exit 1
 }

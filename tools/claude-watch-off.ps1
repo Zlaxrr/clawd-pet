@@ -1,11 +1,11 @@
 <#
   Claude Watch - OFF
-  Cabut hook Claude Watch dari ~/.claude/settings.json. Hook lain dibiarkan utuh.
+  Removes the Claude Watch hooks from ~/.claude/settings.json. Other hooks are left intact.
 #>
 $ErrorActionPreference = 'Stop'
 $settings = Join-Path $env:USERPROFILE '.claude\settings.json'
 
-if (-not (Test-Path $settings)) { Write-Host "Tidak ada settings.json - tidak ada yang dicabut." -ForegroundColor Yellow; exit 0 }
+if (-not (Test-Path $settings)) { Write-Host "No settings.json - nothing to remove." -ForegroundColor Yellow; exit 0 }
 
 function ConvertTo-HashtableDeep($o) {
     if ($o -is [System.Management.Automation.PSCustomObject]) {
@@ -29,7 +29,7 @@ function Test-OursEntry($entry) {
 
 $cfg = ConvertTo-HashtableDeep (Get-Content $settings -Raw | ConvertFrom-Json)
 if (-not ($cfg -is [System.Collections.IDictionary]) -or -not $cfg.Contains('hooks')) {
-    Write-Host "Tidak ada hook Claude Watch yang terpasang." -ForegroundColor Yellow; exit 0
+    Write-Host "No Claude Watch hooks are installed." -ForegroundColor Yellow; exit 0
 }
 
 $removed = 0
@@ -47,6 +47,6 @@ $json = $cfg | ConvertTo-Json -Depth 12
 [System.IO.File]::WriteAllText($settings, $json, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host ""
-Write-Host "  Claude Watch dinonaktifkan - $removed hook dicabut." -ForegroundColor Green
-Write-Host "  Mulai ulang sesi Claude Code agar perubahan berlaku."
+Write-Host "  Claude Watch disabled - removed $removed hook(s)." -ForegroundColor Green
+Write-Host "  Restart your Claude Code session for the change to take effect."
 Write-Host ""

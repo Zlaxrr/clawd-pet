@@ -103,6 +103,11 @@ public static class ClawdWin {
     [DllImport("psapi.dll")] private static extern bool EmptyWorkingSet(IntPtr h);
     [DllImport("kernel32.dll")] private static extern IntPtr GetCurrentProcess();
     public static void TrimMemory() { EmptyWorkingSet(GetCurrentProcess()); }
+    // Give the right-click menu the foreground. The pet window is WS_EX_NOACTIVATE, so the
+    // menu opens without activation and WinForms never sees the "click outside" that would
+    // dismiss it. Foregrounding the menu restores normal click-away-to-close behavior.
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
+    public static void SetForeground(long h) { SetForegroundWindow((IntPtr)h); }
 }
 
 // Detect a keyboard key press (mouse buttons excluded) + how long the user has been idle.
@@ -508,7 +513,7 @@ if ($missingAssets.Count -gt 0) {
     $missingAssets = @($neededAssets | Where-Object { -not (Test-Path (Join-Path $assetDir $_)) })
     if ($missingAssets.Count -gt 0) {
         [void][System.Windows.Forms.MessageBox]::Show(
-            "Aset Clawd belum lengkap (gagal mengunduh):`n$($missingAssets -join "`n")`n`nJalankan download-assets.ps1 secara manual lalu coba lagi.",
+            "Clawd's assets are incomplete (download failed):`n$($missingAssets -join "`n")`n`nRun download-assets.ps1 manually, then try again.",
             'Clawd Pet', 'OK', 'Warning')
         exit
     }
@@ -1618,32 +1623,27 @@ function New-RoundRect([single]$x, [single]$y, [single]$w, [single]$h, [single]$
 $script:statusFmt = [System.Drawing.StringFormat]::GenericTypographic.Clone()
 $script:statusFmt.FormatFlags = $script:statusFmt.FormatFlags -bor [System.Drawing.StringFormatFlags]::MeasureTrailingSpaces
 
-# Spark = "I + X": a long vertical bar overlaid with a shorter diagonal X (6-arm asterisk).
-# Color carries the fade alpha directly, drawn around (0,0) so it stays perfectly centered.
-function Draw-ClaudeSpark($g, [single]$cx, [single]$cy, [int]$alpha) {
-    # 6 tapered-diamond spikes in an I + X layout (vertical pair + diagonal X), slightly thick.
-    # Color carries the fade alpha directly so fade-in/out works.
+function Draw-ClaudeSpark($g, [single]$cx, [single]$cy, [int]$alpha, [single]$scale) {
+    # 6-arm spark: all arms equal length with EQUAL 60-degree gaps (3 lines at 30/90/150, so
+    # one arm points straight up). Straight pen strokes through the center, six tips on one
+    # circle. The throb scales the ARM LENGTH only (pen width stays fixed): at the bottom of
+    # the pulse the arms collapse under the round caps, so the spark shrinks to a single dot.
     $col = [System.Drawing.Color]::FromArgb($alpha, 217, 119, 87)
-    $br  = New-Object System.Drawing.SolidBrush $col
-    $st  = $g.Save()
+    $pen = New-Object System.Drawing.Pen $col, ([single]1.5)
+    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $pen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
+    $st = $g.Save()
     $g.SmoothingMode = 'AntiAlias'
     $g.TranslateTransform($cx, $cy)
-    $r     = [single]5.0
-    $wid   = [single]($r * 0.26)   # half-width at the waist (slightly thick)
-    $waist = [single]($r * 0.34)
-    $spike = New-Object 'System.Drawing.PointF[]' 4
-    foreach ($ang in 90, 270, 45, 135, 225, 315) {
-        $s = $g.Save()
-        $g.RotateTransform([single]$ang)
-        $spike[0] = New-Object System.Drawing.PointF 0, 0
-        $spike[1] = New-Object System.Drawing.PointF $waist, (-$wid)
-        $spike[2] = New-Object System.Drawing.PointF $r, 0
-        $spike[3] = New-Object System.Drawing.PointF $waist, $wid
-        $g.FillPolygon($br, $spike)
-        $g.Restore($s)
+    $r = [single](5.0 * $scale)
+    foreach ($ang in 30, 90, 150) {   # 3 lines, 60 degrees apart = 6 evenly spaced arms
+        $rad = $ang * [Math]::PI / 180.0
+        $dx  = [single]($r * [Math]::Cos($rad))
+        $dy  = [single]($r * [Math]::Sin($rad))
+        $g.DrawLine($pen, (-$dx), (-$dy), $dx, $dy)
     }
     $g.Restore($st)
-    $br.Dispose()
+    $pen.Dispose()
 }
 
 function Build-StatusBubble([string]$tok) {
@@ -1724,10 +1724,16 @@ function Render-Status {
     $ia.Dispose()
     # Spark like the Claude Code loading (the "live" indicator); done already has a checkmark
     if ($tok -ne 'done') {
+        # The spark throbs: arms grow out to full and shrink back down to a single dot (a
+        # heartbeat-style pulse) while the color stays bright, so it beats instead of fading
+        # into darkness. $vis only carries the bubble's own appear/disappear fade. Arm length
+        # swings ~0.05..1.0 over ~0.8s, so the small end is just a dot.
+        $pulse = 0.5 + 0.5 * [Math]::Sin($script:globalT * 0.13)
+        $scale = [single](0.05 + 0.95 * $pulse)
         $a = [int](255 * $vis)
         if ($a -gt 0) {
             $iy = [single](($bh - $script:statusTail) / 2.0)
-            Draw-ClaudeSpark $g 14 $iy $a   # cx 14 = leave a gap on the left; static pixel asterisk
+            Draw-ClaudeSpark $g 14 $iy $a $scale   # cx 14 = leave a gap on the left
         }
     }
     # Position: centered above the head; rises smoothly 6px on fade-in
@@ -2558,6 +2564,10 @@ $script:timer.Add_Tick({
                             # Fresh finish: pick a random playful verb + timestamp (like Claude Code)
                             $v = $script:doneVerbs[$script:rand.Next($script:doneVerbs.Count)]
                             $script:doneMsg = "$v at $([DateTime]::Now.ToString('HH:mm'))"
+                            # Hop for joy so the finish is noticeable - only from a safe, calm pose
+                            if (($script:state -eq 'idle' -or $script:state -eq 'walk') -and $script:fx -eq 'none' -and -not $script:dragging -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none') {
+                                Set-State 'jump' 190
+                            }
                         }
                         $script:watchTok = $tk
                     }
@@ -2566,9 +2576,13 @@ $script:timer.Add_Tick({
                 }
             } catch { }
         }
-        # Show only in a normal, calm pose and while the status is still fresh
-        $calmPose = ((($script:state -eq 'idle') -or ($script:state -eq 'walk')) -and ($script:fx -ne 'duck') -and (-not $script:dragging) -and ($script:balMode -eq 'none') -and (-not $script:starActive) -and ($script:shMode -eq 'none'))
-        $maxAge = if ($script:watchTok -eq 'done') { 2.5 } else { 15.0 }
+        # Keep the bubble up through the small everyday animations: idle (incl. walk and brief
+        # fx like hop / look-around), wave, hide (duck), and jump. Still hidden during the big
+        # "performances" (dance, sleep) and the special modes (dragging, balloon, meteor shower,
+        # shadow); heavier states (fall/climb/push/code/...) fall out by not being whitelisted.
+        $gentleIdle = ((($script:state -eq 'idle') -or ($script:state -eq 'walk')) -and ($script:fx -ne 'dance') -and ($script:fx -ne 'doze'))
+        $calmPose = (($gentleIdle -or ($script:state -eq 'wave') -or ($script:state -eq 'jump')) -and (-not $script:dragging) -and ($script:balMode -eq 'none') -and (-not $script:starActive) -and ($script:shMode -eq 'none'))
+        $maxAge = if ($script:watchTok -eq 'done') { 8.0 } else { 15.0 }
         $fresh  = ($script:watchTok -and ($script:watchAge -lt $maxAge))
         $target = if ($calmPose -and $fresh) { 1.0 } else { 0.0 }
         $script:watchVis += ($target - $script:watchVis) * 0.09   # slow enough to read the fade
@@ -2762,6 +2776,9 @@ $null = $menu.Items.Add('-')
 $exitItem = $menu.Items.Add('Bye Clawd (quit)')
 $exitItem.Add_Click({ $script:form.Close() })
 foreach ($it in $menu.Items) { $it.ForeColor = [System.Drawing.Color]::FromArgb(236, 231, 223) }
+# Foreground the menu once it's shown so a click anywhere outside dismisses it
+# (the pet window is NoActivate, which otherwise breaks click-away-to-close).
+$menu.Add_Opened({ [ClawdWin]::SetForeground($menu.Handle.ToInt64()) })
 $script:form.ContextMenuStrip = $menu
 
 $script:selfHwnd = $script:form.Handle.ToInt64()

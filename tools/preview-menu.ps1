@@ -1,4 +1,4 @@
-# Pratinjau menu klik-kanan bertema Claude -> PNG (item "Dance" disorot).
+# Preview of the Claude-themed right-click menu -> PNG (the "Dance" item is highlighted).
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing, System.Windows.Forms -TypeDefinition @"
 using System;
