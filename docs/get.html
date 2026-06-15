@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Get Clawd — download &amp; quick start</title>
+<meta name="description" content="Download Clawd and get him running on your Windows taskbar in under a minute. One PowerShell script, no install.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --coral:#CC6B4A; --coral-dk:#A9512F; --ink:#16130E; --paper:#F3EFE4; --acid:#F4BE9B; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ -webkit-font-smoothing:antialiased; }
+  body{ font-family:'Space Mono', ui-monospace, monospace; color:var(--ink); background:#0a0807;
+    min-height:100vh; padding:54px 20px 110px; overflow-x:hidden; -webkit-tap-highlight-color:transparent; }
+  ::selection{ background:var(--coral); color:#fff; }
+  a{ color:inherit; text-decoration:none; }
+  .grotesk{ font-family:'Space Grotesk', sans-serif; }
+
+  #bg{ position:fixed; inset:0; z-index:-2; overflow:hidden; }
+  #bg::before{ content:""; position:absolute; inset:0;
+    background-image:linear-gradient(rgba(240,222,200,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(240,222,200,.05) 1px,transparent 1px);
+    background-size:72px 72px; }
+  #bg .blob{ position:absolute; border-radius:50%; filter:blur(60px); will-change:transform; }
+  #bg .b1{ width:58vmax; height:58vmax; top:-16%; left:-8%; background:radial-gradient(circle, rgba(217,119,87,.5), transparent 64%); animation:d1 28s ease-in-out infinite; }
+  #bg .b2{ width:46vmax; height:46vmax; bottom:-18%; right:-8%; background:radial-gradient(circle, rgba(204,107,74,.4), transparent 64%); animation:d2 34s ease-in-out infinite; }
+  @keyframes d1{ 0%,100%{ transform:translate(0,0) scale(1) } 50%{ transform:translate(12vw,8vh) scale(1.16) } }
+  @keyframes d2{ 0%,100%{ transform:translate(0,0) scale(1) } 50%{ transform:translate(-10vw,-6vh) scale(1.12) } }
+  @media (prefers-reduced-motion:reduce){ #bg .blob{ animation:none } }
+
+  .back{ display:inline-block; margin:0 auto 18px; color:#e6dcc8; font-size:13px; border-bottom:1px solid transparent; }
+  .back:hover{ border-color:var(--coral); }
+  .wrap{ width:min(660px,100%); margin:0 auto; }
+
+  .win{ background:var(--paper); border:2.5px solid var(--ink); box-shadow:7px 7px 0 rgba(217,119,87,.16), 0 26px 60px rgba(0,0,0,.5); }
+  .bar{ display:flex; align-items:center; gap:10px; background:var(--coral); color:#fff; padding:9px 12px; font-size:12.5px; letter-spacing:.06em; }
+  .bar .dot-sq{ width:10px; height:10px; background:rgba(255,255,255,.9); border:1px solid rgba(0,0,0,.22); }
+  .bar .ctl{ margin-left:auto; display:flex; gap:7px; }
+  .bar .ctl b{ width:15px; height:15px; border:1.5px solid var(--paper); display:grid; place-items:center; font-size:10px; font-weight:400; line-height:1; }
+  .body{ padding:32px 30px; }
+  .kicker{ font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--coral-dk); font-weight:700; }
+  h1{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:clamp(40px,9vw,68px); letter-spacing:-.03em; line-height:.9; margin:12px 0 0; }
+  h1 .x{ color:var(--coral); }
+  .blurb{ font-size:15px; line-height:1.7; max-width:52ch; margin-top:18px; }
+  .row{ display:flex; gap:14px; flex-wrap:wrap; margin-top:26px; }
+  .key{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; padding:14px 24px; border:2.5px solid var(--ink); box-shadow:4px 4px 0 var(--ink); transition:transform .12s, box-shadow .12s; }
+  .key:active{ transform:translate(4px,4px); box-shadow:0 0 0 var(--ink); }
+  .key.fill{ background:var(--coral); color:#fff; }
+  .key:hover{ transform:translate(-1px,-1px); box-shadow:6px 6px 0 var(--ink); }
+
+  h2{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:18px; margin:34px 0 4px; }
+  .steps{ list-style:none; counter-reset:s; }
+  .steps li{ counter-increment:s; position:relative; padding:12px 0 12px 42px; font-size:14.5px; line-height:1.6; border-bottom:1.5px dashed #c9c1ad; }
+  .steps li:last-child{ border-bottom:0; }
+  .steps li b{ font-weight:700; }
+  .steps li code{ background:#e7e0d0; padding:1px 5px; font-size:13px; }
+  .steps li::before{ content:counter(s,decimal-leading-zero); position:absolute; left:0; top:12px; color:var(--coral-dk); font-weight:700; font-family:'Space Grotesk',sans-serif; }
+  .note{ margin-top:24px; font-size:13px; color:#6f6857; line-height:1.6; }
+  .note b{ color:var(--ink); }
+
+  .taskbar{ position:fixed; left:0; right:0; bottom:0; height:52px; background:#14110c; border-top:2px solid #322a20;
+    display:flex; align-items:center; gap:10px; padding:0 12px; z-index:50; }
+  .start{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px; display:flex; align-items:center; gap:9px;
+    color:var(--paper); background:#211a12; border:2px solid var(--coral); box-shadow:3px 3px 0 #000; padding:7px 14px; }
+  .start .sq{ width:13px; height:13px; background:var(--coral); border:1.5px solid #000; }
+  .clock{ margin-left:auto; font-weight:700; font-size:14px; border:1.5px solid #3a3024; padding:7px 12px; background:#221d15; color:var(--acid); }
+</style>
+</head>
+<body>
+  <div id="bg" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span></div>
+
+  <div class="wrap">
+    <a class="back" href="index.html">← back to Clawd OS</a>
+    <section class="win">
+      <div class="bar"><span class="dot-sq"></span> get-clawd — quick start <span class="ctl"><b>_</b><b>▢</b><b>✕</b></span></div>
+      <div class="body">
+        <div class="kicker">download // windows 10 · 11</div>
+        <h1 class="grotesk">GET CL<span class="x">A</span>WD</h1>
+        <p class="blurb">Grab the latest build, unzip it, and double-click. He pulls his official sprites on first run, then settles onto your taskbar. No installer, no build step.</p>
+        <div class="row">
+          <a class="key fill" href="https://github.com/Zlaxrr/clawd-pet/archive/refs/heads/main.zip" download>DOWNLOAD .ZIP</a>
+          <a class="key" href="https://github.com/Zlaxrr/clawd-pet">SOURCE CODE</a>
+        </div>
+
+        <h2 class="grotesk">Quick start</h2>
+        <ol class="steps">
+          <li><b>Unzip</b> the folder anywhere you like.</li>
+          <li><b>Double-click <code>start-clawd.vbs</code>.</b> The first run downloads the official Clawd sprites from claude.ai (needs internet, a few seconds).</li>
+          <li>Clawd walks onto your <b>taskbar</b>. To close him: right-click Clawd → <i>Bye Clawd</i>, or run <code>stop-clawd.vbs</code>.</li>
+          <li><b>Optional:</b> right-click <code>tools\claude-watch-on.ps1</code> → <i>Run with PowerShell</i> to let him show what Claude Code is doing.</li>
+        </ol>
+
+        <p class="note">Needs <b>Windows 10 or 11</b> (PowerShell 5.1 is already there) and internet the first time. If Windows SmartScreen warns about the <code>.vbs</code>, click <b>More info → Run anyway</b> — it's a generic "this is a script" flag, not anything specific to this project.</p>
+        <p class="note">Clawd &amp; his artwork belong to <b>Anthropic</b>; they're downloaded from claude.ai on first run, never bundled. Fan project, unofficial. Code is <a href="https://github.com/Zlaxrr/clawd-pet/blob/main/LICENSE" style="color:var(--coral-dk);border-bottom:1px solid currentColor">MIT</a>.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="taskbar">
+    <a class="start grotesk" href="index.html"><span class="sq"></span> ← clawd.exe</a>
+    <div class="clock" id="clock">00:00:00</div>
+  </div>
+
+<script>
+  const clk = document.getElementById('clock');
+  const tick = () => clk.textContent = new Date().toTimeString().slice(0,8);
+  setInterval(tick, 1000); tick();
+</script>
+</body>
+</html>
