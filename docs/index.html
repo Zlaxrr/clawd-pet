@@ -23,14 +23,27 @@
     font-family:'Space Mono', ui-monospace, monospace; color:var(--ink);
     min-height:100vh; padding:46px 20px 110px; overflow-x:hidden;
     -webkit-tap-highlight-color:transparent;
-    background:linear-gradient(155deg,#D6795B 0%,#C96A45 58%,#B85B38 100%);
+    background:#0a0807;
   }
+  /* animated dark backdrop: a large grid + slowly drifting warm glow */
+  #bg{ position:fixed; inset:0; z-index:-2; overflow:hidden; }
+  #bg::before{ content:""; position:absolute; inset:0;
+    background-image:linear-gradient(rgba(240,222,200,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(240,222,200,.05) 1px,transparent 1px);
+    background-size:72px 72px; }
+  #bg .blob{ position:absolute; border-radius:50%; filter:blur(60px); will-change:transform; }
+  #bg .b1{ width:60vmax; height:60vmax; top:-18%; left:-8%; background:radial-gradient(circle, rgba(217,119,87,.55), transparent 64%); animation:drift1 26s ease-in-out infinite; }
+  #bg .b2{ width:48vmax; height:48vmax; bottom:-20%; right:-8%; background:radial-gradient(circle, rgba(204,107,74,.42), transparent 64%); animation:drift2 33s ease-in-out infinite; }
+  #bg .b3{ width:42vmax; height:42vmax; top:38%; left:46%; background:radial-gradient(circle, rgba(235,150,98,.30), transparent 66%); animation:drift3 40s ease-in-out infinite; }
+  @keyframes drift1{ 0%,100%{ transform:translate(0,0) scale(1) } 50%{ transform:translate(13vw,9vh) scale(1.18) } }
+  @keyframes drift2{ 0%,100%{ transform:translate(0,0) scale(1) } 50%{ transform:translate(-11vw,-7vh) scale(1.12) } }
+  @keyframes drift3{ 0%,100%{ transform:translate(-50%,0) scale(1) } 50%{ transform:translate(-38%,-11vh) scale(1.22) } }
+  @media (prefers-reduced-motion:reduce){ #bg .blob{ animation:none } }
   ::selection{ background:var(--ink); color:var(--acid); }
   a{ color:inherit; text-decoration:none; }
   .grotesk{ font-family:'Space Grotesk', sans-serif; }
 
   /* scroll progress */
-  #progress{ position:fixed; top:0; left:0; height:3px; width:0; background:var(--ink); z-index:70; }
+  #progress{ position:fixed; top:0; left:0; height:3px; width:0; background:var(--coral); z-index:70; }
 
   /* boot: a centered Claude-style terminal on a dark grid + warm glow backdrop */
   #boot{ position:fixed; inset:0; z-index:999; display:grid; place-items:center; padding:20px;
@@ -59,19 +72,22 @@
   @keyframes blink{ 50%{ opacity:0 } }
 
   /* window chrome */
-  .win{ background:var(--paper); border:2.5px solid var(--ink); box-shadow:9px 9px 0 var(--ink);
+  .win{ background:var(--paper); border:2.5px solid var(--ink); box-shadow:7px 7px 0 rgba(217,119,87,.16), 0 26px 60px rgba(0,0,0,.5);
     width:min(700px,100%); margin:0 auto 54px; position:relative; will-change:transform; }
   .win.live{ transition:none !important; }
   .win .bar{ display:flex; align-items:center; gap:10px; background:var(--ink); color:var(--paper);
     padding:9px 12px; font-size:12.5px; letter-spacing:.06em; text-transform:lowercase; cursor:grab; user-select:none; }
   .win .bar.grabbing{ cursor:grabbing; }
-  .win .bar .dot-sq{ width:10px; height:10px; background:var(--coral); border:1px solid var(--paper); flex:0 0 auto; }
+  /* each window gets its own title-bar colour so it reads against the dark backdrop */
+  #top .bar{ background:#C2643F; } #demo .bar{ background:#2C6A64; } #what .bar{ background:#9C6B2E; }
+  #watch .bar{ background:#46527F; } #get .bar{ background:#566B3C; }
+  .win .bar .dot-sq{ width:10px; height:10px; background:rgba(247,244,236,.88); border:1px solid rgba(0,0,0,.25); flex:0 0 auto; }
   .win .bar .nm{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .win .bar .ctl{ margin-left:auto; display:flex; gap:7px; flex:0 0 auto; }
   .win .bar .ctl b{ width:15px; height:15px; border:1.5px solid var(--paper); display:grid; place-items:center;
     font-size:10px; font-weight:400; line-height:1; }
   .win .body{ padding:30px; }
-  .win.dragging{ box-shadow:16px 16px 0 rgba(0,0,0,.32); z-index:40; }
+  .win.dragging{ box-shadow:12px 12px 0 rgba(217,119,87,.3), 0 32px 70px rgba(0,0,0,.55); z-index:40; }
 
   .kicker{ font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--coral-dk); font-weight:700; }
   .title{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:clamp(50px,12vw,120px);
@@ -141,6 +157,7 @@
 </head>
 <body>
   <div id="progress"></div>
+  <div id="bg" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span></div>
 
   <!-- boot overlay: centered cmd window -->
   <div id="boot">
@@ -216,7 +233,6 @@
       <a href="#what">antics.log</a>
       <a href="#watch">claude_watch</a>
       <a href="#get">install</a>
-      <a href="classic.html">classic ↗</a>
     </div>
     <div class="clock" id="clock">00:00:00</div>
   </div>
