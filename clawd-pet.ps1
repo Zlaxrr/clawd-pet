@@ -1799,6 +1799,8 @@ $script:timer.Add_Tick({
                             # Fresh finish: pick a random playful verb + timestamp (like Claude Code)
                             $v = $script:doneVerbs[$script:rand.Next($script:doneVerbs.Count)]
                             $script:doneMsg = "$v at $([DateTime]::Now.ToString('HH:mm'))"
+                            # If he dozed off, wake him up so he never sleeps through a finish
+                            if ($script:fx -eq 'doze') { $script:fx = 'none'; $script:fxTicks = 0 }
                             # Hop for joy so the finish is noticeable - only from a safe, calm pose
                             if (($script:state -eq 'idle' -or $script:state -eq 'walk') -and $script:fx -eq 'none' -and -not $script:dragging -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none') {
                                 Set-State 'jump' 190
