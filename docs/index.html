@@ -32,14 +32,22 @@
   /* scroll progress */
   #progress{ position:fixed; top:0; left:0; height:3px; width:0; background:var(--ink); z-index:70; }
 
-  /* boot sequence */
-  #boot{ position:fixed; inset:0; z-index:999; background:#0c0b08; color:#E9E0CB;
-    font:14px/1.75 'Space Mono',monospace; padding:9vh 8vw; cursor:pointer; transition:opacity .6s ease; }
+  /* boot: a small centered cmd window where "Claude" types Clawd OS awake */
+  #boot{ position:fixed; inset:0; z-index:999; background:#0c0b08; display:grid; place-items:center;
+    padding:20px; cursor:pointer; transition:opacity .45s ease; }
   #boot.done{ opacity:0; pointer-events:none; }
+  #bootwin{ width:min(460px,90vw); background:#15120d; border:2.5px solid #3a352c; box-shadow:0 24px 60px rgba(0,0,0,.5); }
+  #bootwin .bbar{ display:flex; align-items:center; gap:9px; background:#241f18; color:#cdbfa6;
+    padding:8px 12px; font:12px 'Space Mono',monospace; letter-spacing:.05em; }
+  #bootwin .bbar .sq{ width:9px; height:9px; background:var(--coral); flex:0 0 auto; }
+  #bootwin .bbar .ti{ color:#8a8270; }
+  #bootwin .bbar .typing{ margin-left:auto; color:#74e0a2; font-size:11px; white-space:nowrap; }
+  #bootwin .bbar .typing::after{ content:'●'; margin-left:5px; animation:blink 1s steps(1) infinite; }
+  #bootlog{ padding:18px 18px 4px; font:13.5px/1.7 'Space Mono',monospace; color:#E9E0CB; min-height:92px; }
   #bootlog div{ white-space:pre-wrap; word-break:break-word; }
-  #barwrap{ margin-top:20px; width:min(360px,76%); height:15px; border:1.5px solid #4a463c; }
-  #bar{ height:100%; width:0; background:var(--coral); transition:width .85s linear; }
-  #boot .skip{ position:absolute; right:20px; bottom:18px; font-size:12px; color:#6a6456; }
+  #barwrap{ margin:4px 18px 18px; height:10px; border:1.5px solid #4a463c; }
+  #bar{ height:100%; width:0; background:var(--coral); transition:width .28s linear; }
+  #boot .skip{ position:absolute; right:18px; bottom:16px; font-size:12px; color:#5d584c; }
   .cur{ animation:blink 1.05s steps(1) infinite; }
   @keyframes blink{ 50%{ opacity:0 } }
 
@@ -106,6 +114,7 @@
 
   /* reveal: windows slide in from their tilt side, settle into a slight tilt */
   .rise{ opacity:0; transition:opacity .5s ease, transform .62s cubic-bezier(.2,.8,.2,1); }
+  .rise.in{ opacity:1; }
   .tilt-l.rise{ transform:translate(-46px,22px) rotate(-1.4deg); }
   .tilt-r.rise{ transform:translate(46px,22px) rotate(1.2deg); }
   .tilt-l.rise.in{ transform:rotate(-1.4deg); }
@@ -126,8 +135,15 @@
 <body>
   <div id="progress"></div>
 
-  <!-- boot overlay -->
-  <div id="boot"><div id="bootlog"></div><div id="barwrap"><div id="bar"></div></div><div class="skip">click to skip</div></div>
+  <!-- boot overlay: centered cmd window -->
+  <div id="boot">
+    <div id="bootwin">
+      <div class="bbar"><span class="sq"></span><span class="ti">C:\clawd — cmd</span><span class="typing">claude is typing</span></div>
+      <div id="bootlog"></div>
+      <div id="barwrap"><div id="bar"></div></div>
+    </div>
+    <div class="skip">click to skip</div>
+  </div>
 
   <section class="win tilt-l rise" id="top">
     <div class="bar"><span class="dot-sq"></span><span class="nm">C:\clawd\readme.txt</span><span class="ctl"><b>_</b><b>▢</b><b>✕</b></span></div>
@@ -223,21 +239,19 @@
   const boot = document.getElementById('boot'), blog = document.getElementById('bootlog'), bar = document.getElementById('bar');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const lines = [
-    'CLAWD BIOS v1.0  —  (c) a fan, not Anthropic',
-    '',
-    'detecting taskbar ............... [ OK ]',
-    'loading winforms.dll ............ [ OK ]',
-    'mounting /claude/watch .......... [ OK ]',
-    'allocating coral ................ [ OK ]',
-    'spawning clawd.exe .............. [ OK ]',
-    '',
-    'boot complete. starting Clawd OS_'
+    'claude@clawd:~$ ./start-clawd.vbs',
+    'waking the crab ......... ok',
+    'mounting taskbar ........ ok',
+    'starting Clawd OS_'
   ];
-  const colorize = (s) => s.replace('[ OK ]', '[ <span style="color:#74e0a2">OK</span> ]').replace(/_$/, '<span class="cur">▌</span>');
+  const colorize = (s) => s
+    .replace(/^(claude@clawd:~\$)/, '<span style="color:#74e0a2">$1</span>')
+    .replace(/ ok$/, ' <span style="color:#74e0a2">ok</span>')
+    .replace(/_$/, '<span class="cur">▌</span>');
   let skip = false;
   function finishBoot(){
     bar.style.width = '100%';
-    setTimeout(()=>{ boot.classList.add('done'); startReveals(); setTimeout(()=>boot.remove(), 650); }, 880);
+    setTimeout(()=>{ boot.classList.add('done'); startReveals(); setTimeout(()=>boot.remove(), 480); }, 320);
   }
   function runBoot(){
     let li = 0;
@@ -249,8 +263,8 @@
       (function ch(){
         if (skip){ nextLine(); return; }
         div.textContent = text.slice(0, ci++);
-        if (ci <= text.length){ setTimeout(ch, 7 + Math.random()*20); }
-        else { div.innerHTML = colorize(text); li++; setTimeout(nextLine, text === '' ? 45 : 150); }
+        if (ci <= text.length){ setTimeout(ch, 3 + Math.random()*7); }
+        else { div.innerHTML = colorize(text); li++; setTimeout(nextLine, 55); }
       })();
     })();
   }
