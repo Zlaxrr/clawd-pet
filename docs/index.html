@@ -75,13 +75,10 @@
   .win{ background:var(--paper); border:2.5px solid var(--ink); box-shadow:7px 7px 0 rgba(217,119,87,.16), 0 26px 60px rgba(0,0,0,.5);
     width:min(700px,100%); margin:0 auto 54px; position:relative; will-change:transform; }
   .win.live{ transition:none !important; }
-  .win .bar{ display:flex; align-items:center; gap:10px; background:var(--ink); color:var(--paper);
+  .win .bar{ display:flex; align-items:center; gap:10px; background:var(--coral); color:#fff;
     padding:9px 12px; font-size:12.5px; letter-spacing:.06em; text-transform:lowercase; cursor:grab; user-select:none; }
   .win .bar.grabbing{ cursor:grabbing; }
-  /* each window gets its own title-bar colour so it reads against the dark backdrop */
-  #top .bar{ background:#C2643F; } #demo .bar{ background:#2C6A64; } #what .bar{ background:#9C6B2E; }
-  #watch .bar{ background:#46527F; } #get .bar{ background:#566B3C; }
-  .win .bar .dot-sq{ width:10px; height:10px; background:rgba(247,244,236,.88); border:1px solid rgba(0,0,0,.25); flex:0 0 auto; }
+  .win .bar .dot-sq{ width:10px; height:10px; background:rgba(255,255,255,.9); border:1px solid rgba(0,0,0,.22); flex:0 0 auto; }
   .win .bar .nm{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .win .bar .ctl{ margin-left:auto; display:flex; gap:7px; flex:0 0 auto; }
   .win .bar .ctl b{ width:15px; height:15px; border:1.5px solid var(--paper); display:grid; place-items:center;
@@ -125,15 +122,15 @@
   .steps li:last-child{ border-bottom:0; }
   .steps li::before{ content:counter(s,decimal-leading-zero); position:absolute; left:0; top:9px; color:var(--coral-dk); font-weight:700; }
 
-  .taskbar{ position:fixed; left:0; right:0; bottom:0; height:52px; background:var(--paper);
-    border-top:2.5px solid var(--ink); display:flex; align-items:center; gap:10px; padding:0 12px; z-index:50; }
+  .taskbar{ position:fixed; left:0; right:0; bottom:0; height:52px; background:#14110c;
+    border-top:2px solid #322a20; display:flex; align-items:center; gap:10px; padding:0 12px; z-index:50; }
   .start{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14px; display:flex; align-items:center; gap:9px;
-    border:2.5px solid var(--ink); box-shadow:3px 3px 0 var(--ink); padding:7px 14px; flex:0 0 auto; }
-  .start .sq{ width:13px; height:13px; background:var(--coral); border:1.5px solid var(--ink); }
+    color:var(--paper); background:#211a12; border:2px solid var(--coral); box-shadow:3px 3px 0 #000; padding:7px 14px; flex:0 0 auto; }
+  .start .sq{ width:13px; height:13px; background:var(--coral); border:1.5px solid #000; }
   .tabs{ display:flex; gap:7px; overflow:hidden; }
-  .tabs a{ font-size:12.5px; padding:7px 12px; border:2px solid var(--ink); background:#e8e2d3; white-space:nowrap; }
-  .tabs a:hover{ background:var(--coral); color:#fff; }
-  .clock{ margin-left:auto; font-weight:700; font-size:14px; border:2.5px solid var(--ink); padding:7px 12px; background:#e8e2d3; flex:0 0 auto; }
+  .tabs a{ font-size:12.5px; padding:7px 12px; border:1.5px solid #3a3024; background:#221d15; color:#e6dcc8; white-space:nowrap; }
+  .tabs a:hover{ background:var(--coral); color:#fff; border-color:var(--coral); }
+  .clock{ margin-left:auto; font-weight:700; font-size:14px; border:1.5px solid #3a3024; padding:7px 12px; background:#221d15; color:var(--acid); flex:0 0 auto; }
 
   /* reveal: windows slide in from their tilt side, settle into a slight tilt */
   .rise{ opacity:0; transition:opacity .5s ease, transform .62s cubic-bezier(.2,.8,.2,1); }
