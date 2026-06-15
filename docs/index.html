@@ -32,22 +32,29 @@
   /* scroll progress */
   #progress{ position:fixed; top:0; left:0; height:3px; width:0; background:var(--ink); z-index:70; }
 
-  /* boot: a small centered cmd window where "Claude" types Clawd OS awake */
-  #boot{ position:fixed; inset:0; z-index:999; background:#0c0b08; display:grid; place-items:center;
-    padding:20px; cursor:pointer; transition:opacity .45s ease; }
+  /* boot: a centered Claude-style terminal on a dark grid + warm glow backdrop */
+  #boot{ position:fixed; inset:0; z-index:999; display:grid; place-items:center; padding:20px;
+    cursor:pointer; overflow:hidden; background:#0a0807; transition:opacity .45s ease; }
   #boot.done{ opacity:0; pointer-events:none; }
-  #bootwin{ width:min(460px,90vw); background:#15120d; border:2.5px solid #3a352c; box-shadow:0 24px 60px rgba(0,0,0,.5); }
-  #bootwin .bbar{ display:flex; align-items:center; gap:9px; background:#241f18; color:#cdbfa6;
-    padding:8px 12px; font:12px 'Space Mono',monospace; letter-spacing:.05em; }
-  #bootwin .bbar .sq{ width:9px; height:9px; background:var(--coral); flex:0 0 auto; }
-  #bootwin .bbar .ti{ color:#8a8270; }
-  #bootwin .bbar .typing{ margin-left:auto; color:#74e0a2; font-size:11px; white-space:nowrap; }
-  #bootwin .bbar .typing::after{ content:'●'; margin-left:5px; animation:blink 1s steps(1) infinite; }
-  #bootlog{ padding:18px 18px 4px; font:13.5px/1.7 'Space Mono',monospace; color:#E9E0CB; min-height:92px; }
+  #boot::before{ content:""; position:absolute; inset:-2px; z-index:0;
+    background-image:linear-gradient(rgba(240,222,200,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(240,222,200,.05) 1px,transparent 1px);
+    background-size:64px 64px; }
+  #boot::after{ content:""; position:absolute; inset:0; z-index:0;
+    background:radial-gradient(48vmax 40vmax at 72% 26%, rgba(217,119,87,.42), transparent 62%),
+               radial-gradient(40vmax 38vmax at 18% 92%, rgba(204,107,74,.20), transparent 60%); }
+  #bootwin{ position:relative; z-index:1; width:min(480px,90vw); background:#1a1510;
+    border:2px solid var(--coral); box-shadow:0 30px 80px rgba(0,0,0,.6); }
+  #bootwin .bbar{ display:flex; align-items:center; gap:9px; background:#241d15; color:#e6dac3;
+    padding:9px 13px; font:12px 'Space Mono',monospace; letter-spacing:.04em; border-bottom:1px solid #3a3024; }
+  #bootwin .bbar .spark{ color:var(--coral); }
+  #bootwin .bbar .ti{ color:#a89a82; }
+  #bootwin .bbar .bctl{ margin-left:auto; display:flex; gap:6px; }
+  #bootwin .bbar .bctl b{ width:14px; height:14px; border:1.5px solid #5b5142; display:grid; place-items:center; font:9px/1 'Space Mono'; color:#8a7f6c; }
+  #bootlog{ padding:18px 18px 4px; font:13.5px/1.75 'Space Mono',monospace; color:#ECE3D2; min-height:124px; }
   #bootlog div{ white-space:pre-wrap; word-break:break-word; }
-  #barwrap{ margin:4px 18px 18px; height:10px; border:1.5px solid #4a463c; }
+  #barwrap{ margin:4px 18px 18px; height:9px; border:1.5px solid #4a3f30; background:#120e0a; }
   #bar{ height:100%; width:0; background:var(--coral); transition:width .28s linear; }
-  #boot .skip{ position:absolute; right:18px; bottom:16px; font-size:12px; color:#5d584c; }
+  #boot .skip{ position:absolute; right:18px; bottom:14px; z-index:1; font-size:12px; color:#7a6f5c; }
   .cur{ animation:blink 1.05s steps(1) infinite; }
   @keyframes blink{ 50%{ opacity:0 } }
 
@@ -138,7 +145,7 @@
   <!-- boot overlay: centered cmd window -->
   <div id="boot">
     <div id="bootwin">
-      <div class="bbar"><span class="sq"></span><span class="ti">C:\clawd — cmd</span><span class="typing">claude is typing</span></div>
+      <div class="bbar"><span class="spark">✶</span><span class="ti">clawd — claude code</span><span class="bctl"><b>▢</b><b>✕</b></span></div>
       <div id="bootlog"></div>
       <div id="barwrap"><div id="bar"></div></div>
     </div>
@@ -239,14 +246,16 @@
   const boot = document.getElementById('boot'), blog = document.getElementById('bootlog'), bar = document.getElementById('bar');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const lines = [
-    'claude@clawd:~$ ./start-clawd.vbs',
-    'waking the crab ......... ok',
-    'mounting taskbar ........ ok',
-    'starting Clawd OS_'
+    '✶ clawd is waking up...',
+    '> start-clawd.vbs',
+    '· fetching sprites from claude.ai ... done',
+    '· mounting your taskbar ............ done',
+    '· claude watch online ............. done',
+    "he's on his feet. say hi_"
   ];
   const colorize = (s) => s
-    .replace(/^(claude@clawd:~\$)/, '<span style="color:#74e0a2">$1</span>')
-    .replace(/ ok$/, ' <span style="color:#74e0a2">ok</span>')
+    .replace(/^(✶|>|·)/, '<span style="color:#D9775A">$1</span>')
+    .replace(/ done$/, ' <span style="color:#D9775A">done</span>')
     .replace(/_$/, '<span class="cur">▌</span>');
   let skip = false;
   function finishBoot(){
