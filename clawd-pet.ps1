@@ -747,6 +747,7 @@ $script:globalT   = [double]0
 $script:fx        = 'none'   # none | hop | wiggle | squash | lookaround | doze
 $script:busyUntil = 0        # globalT until which Working/Cooking stays on cooldown (anti-thrash)
 $script:lastBusy  = ''       # which busy animation ran last ('work' | 'cook') - to alternate
+$script:gifDrawTop = 0       # y of the top of the last standalone GIF drawn (for bubble placement)
 $script:fxTicks   = 0
 $script:fxTotal   = 1
 $script:blinkTicks= 0
@@ -1464,13 +1465,15 @@ function Render-Pet($g) {
         $img = $script:gifStates[$script:state]
         $src = $script:gifSrc[$script:state]
         [System.Drawing.ImageAnimator]::UpdateFrames($img)
-        # Fit the character bounds into the FULL window width (margins included) so he renders
-        # as large as the idle sprite; bottom-aligned so his feet stay on the floor.
-        $fit = [Math]::Min($script:formW / [double]$src.Width, $script:destH / [double]$src.Height)
-        $dw  = [int]($src.Width * $fit)
-        $dh  = [int]($src.Height * $fit)
+        # Match the idle sprite's footprint: scale so the character's height equals the idle crab
+        # height (crabH), clamped to the window width, centered, bottom-aligned (feet on the floor).
+        $scale = $script:crabH / [double]$src.Height
+        if (($src.Width * $scale) -gt $script:formW) { $scale = $script:formW / [double]$src.Width }
+        $dw  = [int]($src.Width * $scale)
+        $dh  = [int]($src.Height * $scale)
         $dx  = [int](($script:formW - $dw) / 2.0)
         $dy  = [int]($script:destH - $dh)
+        $script:gifDrawTop = $dy   # head top, so the Claude Watch bubble can sit just above it
         $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
         $g.DrawImage($img, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)), $src, [System.Drawing.GraphicsUnit]::Pixel)
         return
