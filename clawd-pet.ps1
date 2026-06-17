@@ -751,6 +751,7 @@ $script:globalT   = [double]0
 $script:fx        = 'none'   # none | hop | wiggle | squash | lookaround | doze
 $script:busyUntil = 0        # globalT until which Working/Cooking stays on cooldown (anti-thrash)
 $script:lastBusy  = ''       # which busy animation ran last ('work' | 'cook') - to alternate
+$script:workAnim  = ''       # the single animation locked in for the current Claude-working session
 $script:gifDrawTop = 0       # y of the top of the last standalone GIF drawn (for bubble placement)
 $script:fxTicks   = 0
 $script:fxTotal   = 1
@@ -947,10 +948,26 @@ function Test-ClaudeWorking {
 }
 
 # Switch to the next busy animation, alternating Working <-> Cooking so it stays lively.
+# Used for the rare ambient appearance while Claude is idle.
 function Start-BusyNext {
     $next = if ($script:lastBusy -eq 'work') { 'cook' } else { 'work' }
     $script:lastBusy = $next
     Set-State $next $script:rand.Next(320, 460)
+}
+
+# Keep Clawd in ONE animation (Working or Cooking) for the whole Claude-working session: the
+# choice is picked once (alternating across sessions) and held until Claude is done. Calling this
+# again while already in that animation just extends it, so the GIF loops without restarting.
+function Start-WorkSession {
+    if ($script:workAnim -eq '') {
+        $script:workAnim = if ($script:lastBusy -eq 'work') { 'cook' } else { 'work' }
+        $script:lastBusy = $script:workAnim
+    }
+    if ($script:state -eq $script:workAnim) {
+        $script:ticks = $script:rand.Next(320, 460)   # already in it - keep going, no restart
+    } else {
+        Set-State $script:workAnim $script:rand.Next(320, 460)
+    }
 }
 
 function Draw-Balloon($g, [single]$cx, [single]$top, [double]$s) {
@@ -1886,12 +1903,21 @@ $script:timer.Add_Tick({
         elseif ($script:statusOv.Visible) { $script:statusOv.Hide() }
     }
 
-    # While Claude Code is working, lock Clawd into the Working/Cooking animations - no wandering,
-    # dancing, or mischief until Claude is done. Interrupt the everyday poses at once (the bigger
-    # one-off performances are left to finish; the transition picker keeps it going afterwards).
+    # While Claude Code is working, lock Clawd into ONE animation (Working or Cooking) for the whole
+    # session - it loops until Claude is done, then ends together with the status text. No wandering,
+    # dancing, or mischief meanwhile. Everyday poses are interrupted at once (bigger one-off
+    # performances are left to finish; the transition picker keeps the loop going afterwards).
     $busyStates = @('idle', 'walk', 'wave', 'jump', 'dance')
-    if ((Test-ClaudeWorking) -and -not $script:dragging -and $script:fx -eq 'none' -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none' -and ($busyStates -contains $script:state)) {
-        Start-BusyNext
+    if (Test-ClaudeWorking) {
+        if (-not $script:dragging -and $script:fx -eq 'none' -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none' -and ($busyStates -contains $script:state)) {
+            Start-WorkSession
+        }
+    } elseif ($script:workAnim -ne '') {
+        # Claude finished and the status text is gone -> end the work animation right now
+        $script:workAnim = ''
+        if ($script:state -eq 'work' -or $script:state -eq 'cook') {
+            Set-State 'idle' $script:rand.Next($script:idleMinT, $script:idleMaxT)
+        }
     }
 
     # Shooting-star show: update + render; cancel if its state gets taken over by another action
@@ -2574,9 +2600,9 @@ $script:timer.Add_Tick({
     }
 
     if ($script:ticks -le 0) {
-        # Claude still working -> keep Working/Cooking; never fall through to idle behaviours
+        # Claude still working -> keep looping the one chosen animation; never fall through to idle
         if ((Test-ClaudeWorking) -and -not $script:dragging -and $script:fx -eq 'none' -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none') {
-            Start-BusyNext
+            Start-WorkSession
             return
         }
         switch ($script:state) {
