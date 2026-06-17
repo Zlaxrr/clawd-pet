@@ -937,6 +937,18 @@ function Start-Fx([string]$f, [int]$total) {
     $script:fxTicks = $total
 }
 
+# True while Claude Code is actively working (a fresh, non-"done" Claude Watch token).
+function Test-ClaudeWorking {
+    return ($script:featWatch -and $script:watchTok -and $script:watchTok -ne 'done' -and $script:watchAge -lt 15.0)
+}
+
+# Switch to the next busy animation, alternating Working <-> Cooking so it stays lively.
+function Start-BusyNext {
+    $next = if ($script:lastBusy -eq 'work') { 'cook' } else { 'work' }
+    $script:lastBusy = $next
+    Set-State $next $script:rand.Next(320, 460)
+}
+
 function Draw-Balloon($g, [single]$cx, [single]$top, [double]$s) {
     $w = [single](36 * $s); $h = [single](44 * $s)
     $g.FillEllipse($script:balBrush, ($cx - $w / 2), $top, $w, $h)
@@ -1780,9 +1792,13 @@ function Render-Status {
             Draw-ClaudeSpark $g 14 $iy $a $scale   # cx 14 = leave a gap on the left
         }
     }
-    # Position: centered above the head; rises smoothly 6px on fade-in
+    # Position: centered above the head; rises smoothly 6px on fade-in.
+    # For the standalone GIFs (work/cook) use the actual drawn top so the bubble never
+    # overlaps the head, whatever the GIF's height.
     $cxs = $script:form.Left + $script:formW / 2.0
-    $headTop = $script:form.Top + ($script:destH - $script:crabH)
+    $crabTop = $script:destH - $script:crabH
+    if ($script:gifStates.ContainsKey($script:state)) { $crabTop = $script:gifDrawTop }
+    $headTop = $script:form.Top + $crabTop
     $x = [int]($cxs - $bw / 2.0)
     $y = [int]($headTop - $bh - 1 + (1.0 - $vis) * 6)
     $x = [int][Math]::Max($script:wa.Left, [Math]::Min($x, ($script:wa.Right - $bw)))
@@ -1861,6 +1877,14 @@ $script:timer.Add_Tick({
         # (no trailing/freezing). watchVis keeps easing to 0 so it fades back in cleanly later.
         if ($calmPose -and $script:watchVis -gt 0.001) { Render-Status }
         elseif ($script:statusOv.Visible) { $script:statusOv.Hide() }
+    }
+
+    # While Claude Code is working, lock Clawd into the Working/Cooking animations - no wandering,
+    # dancing, or mischief until Claude is done. Interrupt the everyday poses at once (the bigger
+    # one-off performances are left to finish; the transition picker keeps it going afterwards).
+    $busyStates = @('idle', 'walk', 'wave', 'jump', 'dance')
+    if ((Test-ClaudeWorking) -and -not $script:dragging -and $script:fx -eq 'none' -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none' -and ($busyStates -contains $script:state)) {
+        Start-BusyNext
     }
 
     # Shooting-star show: update + render; cancel if its state gets taken over by another action
@@ -2543,6 +2567,11 @@ $script:timer.Add_Tick({
     }
 
     if ($script:ticks -le 0) {
+        # Claude still working -> keep Working/Cooking; never fall through to idle behaviours
+        if ((Test-ClaudeWorking) -and -not $script:dragging -and $script:fx -eq 'none' -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none') {
+            Start-BusyNext
+            return
+        }
         switch ($script:state) {
             'idle' {
                 # Rare: a balloon drops from the sky (~3%, only on the floor)
@@ -2560,34 +2589,13 @@ $script:timer.Add_Tick({
                     Start-Shadow
                     return
                 }
-                # Working: while Claude Code is active Clawd often "works" alongside it; also
-                # a rare ambient idle animation. Bounded performance, spaced out by busyUntil so
-                # he never thrashes between busy poses (shared with Cooking).
-                if ($script:globalT -ge $script:busyUntil) {
-                    $working = ($script:featWatch -and $script:watchTok -and $script:watchTok -ne 'done' -and $script:watchAge -lt 15.0)
-                    $chance = if ($working) { 0.30 } else { 0.03 }   # rare when Claude is idle
-                    if ($script:lastBusy -eq 'work') { $chance *= 0.5 }   # don't repeat back-to-back
-                    if ($script:rand.NextDouble() -lt $chance) {
-                        $dur = $script:rand.Next(300, 440)   # ~5-7s of the GIF
-                        $script:busyUntil = $script:globalT + $dur + $script:rand.Next(500, 900)
-                        $script:lastBusy = 'work'
-                        Set-State 'work' $dur
-                        return
-                    }
-                }
-                # Cooking: companion to Working - busy alongside Claude Code, rare as ambient.
-                # Shares busyUntil with Working so the two never overlap or ping-pong.
-                if ($script:globalT -ge $script:busyUntil) {
-                    $working = ($script:featWatch -and $script:watchTok -and $script:watchTok -ne 'done' -and $script:watchAge -lt 15.0)
-                    $chance = if ($working) { 0.30 } else { 0.03 }   # rare when Claude is idle
-                    if ($script:lastBusy -eq 'cook') { $chance *= 0.5 }   # don't repeat back-to-back
-                    if ($script:rand.NextDouble() -lt $chance) {
-                        $dur = $script:rand.Next(300, 440)   # ~5-7s of the GIF
-                        $script:busyUntil = $script:globalT + $dur + $script:rand.Next(500, 900)
-                        $script:lastBusy = 'cook'
-                        Set-State 'cook' $dur
-                        return
-                    }
+                # Ambient: when Claude is idle, Clawd still tinkers occasionally (Working/Cooking).
+                # While Claude is actually working this is unreachable - that case is handled up top
+                # by the lock-in force. Rare (~6% combined), spaced out by busyUntil, alternating.
+                if ($script:globalT -ge $script:busyUntil -and $script:rand.NextDouble() -lt 0.06) {
+                    Start-BusyNext
+                    $script:busyUntil = $script:globalT + $script:ticks + $script:rand.Next(600, 1100)
+                    return
                 }
                 # Mischief: perched on a window? sometimes drags it (~20%)
                 if ($script:featMisch -and $script:onPlat -and $script:fx -eq 'none' -and $script:rand.NextDouble() -lt 0.20) {
@@ -2846,6 +2854,10 @@ $miCode = $menu.Items.Add('Hello World!')
 $miCode.Add_Click({ Set-State 'code' 380 })
 $miDance = $menu.Items.Add('Dance')
 $miDance.Add_Click({ Set-State 'dance' 340 })
+$miWork = $menu.Items.Add('Working')
+$miWork.Add_Click({ $script:lastBusy = 'work'; Set-State 'work' 460 })
+$miCook = $menu.Items.Add('Cooking')
+$miCook.Add_Click({ $script:lastBusy = 'cook'; Set-State 'cook' 460 })
 $miDuck = $menu.Items.Add('Hide')
 $miDuck.Add_Click({ Start-Fx 'duck' 300; Set-State 'idle' 500 })
 $miDoze = $menu.Items.Add('Sleep')
