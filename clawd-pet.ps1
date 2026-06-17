@@ -548,6 +548,10 @@ $script:gifStates['cook']  = $script:imgCook;  $script:gifSrc['cook']  = (Get-Gi
 # pan reaches out to the side, inflating its bounds, so its crab reads small - bump it to fill
 # the window. Clamped to the window afterwards, so it never clips.
 $script:gifScale = @{ 'cook' = 1.4 }
+# Head anchor (centre x, top y) in each GIF's OWN pixel coords. These wide GIFs put Clawd's body
+# off-centre (the laptop / the reaching pan), so the status bubble is centred over this point
+# instead of the window centre - keeping it right above his head, not the middle of the GIF.
+$script:gifHead = @{ 'work' = @(134, 26); 'cook' = @(292, 15) }
 
 # Crab area inside the 2750x1850 canvas: x 736..1935, y 351..1850 (feet at the bottom)
 $script:srcRect = New-Object System.Drawing.Rectangle(736, 351, 1200, 1499)
@@ -757,6 +761,8 @@ $script:busyUntil = 0        # globalT until which Working/Cooking stays on cool
 $script:lastBusy  = ''       # which busy animation ran last ('work' | 'cook') - to alternate
 $script:workAnim  = ''       # the single animation locked in for the current Claude-working session
 $script:gifDrawTop = 0       # y of the top of the last standalone GIF drawn (for bubble placement)
+$script:gifHeadX   = 0       # window-relative x of Clawd's head in the current standalone GIF
+$script:gifHeadTop = 0       # window-relative y of the top of his head in the current standalone GIF
 $script:fxTicks   = 0
 $script:fxTotal   = 1
 $script:blinkTicks= 0
@@ -1513,7 +1519,16 @@ function Render-Pet($g) {
         $dh  = [int]($src.Height * $scale)
         $dx  = [int](($script:formW - $dw) / 2.0)
         $dy  = [int]($script:destH - $dh)
-        $script:gifDrawTop = $dy   # head top, so the Claude Watch bubble can sit just above it
+        $script:gifDrawTop = $dy
+        # Map the head anchor (GIF pixel coords) to this window so the bubble sits over his head.
+        if ($script:gifHead.ContainsKey($script:state)) {
+            $ha = $script:gifHead[$script:state]
+            $script:gifHeadX   = [int]($dx + ($ha[0] - $src.X) * $scale)
+            $script:gifHeadTop = [int]($dy + ($ha[1] - $src.Y) * $scale)
+        } else {
+            $script:gifHeadX   = [int]($script:formW / 2.0)
+            $script:gifHeadTop = $dy
+        }
         $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
         $g.DrawImage($img, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)), $src, [System.Drawing.GraphicsUnit]::Pixel)
         return
@@ -1793,7 +1808,10 @@ function Render-Status {
     # overlaps the head, whatever the GIF's height.
     $cxs = $script:form.Left + $script:formW / 2.0
     $crabTop = $script:destH - $script:crabH
-    if ($script:gifStates.ContainsKey($script:state)) { $crabTop = $script:gifDrawTop }
+    if ($script:gifStates.ContainsKey($script:state)) {
+        $cxs = $script:form.Left + $script:gifHeadX   # centre over his head, not the window
+        $crabTop = $script:gifHeadTop
+    }
     $headTop = $script:form.Top + $crabTop
     $x = [int]($cxs - $bw / 2.0)
     $y = [int]($headTop - $bh - 1 + (1.0 - $vis) * 6)
