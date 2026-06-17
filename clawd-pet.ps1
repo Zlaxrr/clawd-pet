@@ -523,11 +523,13 @@ $script:imgWave  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-
 $script:imgJump  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-JumpingHappy.gif'))
 $script:imgLurk  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Lurking.gif'))
 $script:imgDance = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Dancing.gif'))
+$script:imgWork  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Working.gif'))
 
 # Standalone GIFs: already cropped to the character (not the 2750x1850 canvas), so they are
 # drawn WHOLE - scaled to fit the window and bottom-aligned - instead of via $script:srcRect.
 # Played frame-by-frame with ImageAnimator, exactly like Clawd-Waving / Clawd-JumpingHappy.
 $script:gifStates = @{ 'dance' = $script:imgDance }
+$script:gifStates['work'] = $script:imgWork
 
 # Crab area inside the 2750x1850 canvas: x 736..1935, y 351..1850 (feet at the bottom)
 $script:srcRect = New-Object System.Drawing.Rectangle(736, 351, 1200, 1499)
@@ -906,13 +908,14 @@ function Get-CurrentImage {
 }
 
 function Set-State([string]$s, [int]$durTicks) {
-    foreach ($img in @($script:imgWave, $script:imgJump, $script:imgLurk, $script:imgDance)) { [ClawdAnim]::Stop($img) }
+    foreach ($img in @($script:imgWave, $script:imgJump, $script:imgLurk, $script:imgDance, $script:imgWork)) { [ClawdAnim]::Stop($img) }
     $script:state = $s
     $script:ticks = $durTicks
     if ($s -eq 'wave')  { [ClawdAnim]::Start($script:imgWave) }
     if ($s -eq 'jump')  { [ClawdAnim]::Start($script:imgJump) }
     if ($s -eq 'lurk')  { [ClawdAnim]::Start($script:imgLurk) }
     if ($s -eq 'dance') { [ClawdAnim]::Start($script:imgDance) }
+    if ($s -eq 'work')  { [ClawdAnim]::Start($script:imgWork) }
     Update-PetVisual
 }
 
@@ -1831,7 +1834,7 @@ $script:timer.Add_Tick({
         # "performances" (dance, sleep) and the special modes (dragging, balloon, meteor shower,
         # shadow); heavier states (fall/climb/push/code/...) fall out by not being whitelisted.
         $gentleIdle = ((($script:state -eq 'idle') -or ($script:state -eq 'walk')) -and ($script:fx -ne 'doze'))
-        $calmPose = (($gentleIdle -or ($script:state -eq 'wave') -or ($script:state -eq 'jump')) -and (-not $script:dragging) -and ($script:balMode -eq 'none') -and (-not $script:starActive) -and ($script:shMode -eq 'none'))
+        $calmPose = (($gentleIdle -or ($script:state -eq 'wave') -or ($script:state -eq 'jump') -or ($script:state -eq 'work')) -and (-not $script:dragging) -and ($script:balMode -eq 'none') -and (-not $script:starActive) -and ($script:shMode -eq 'none'))
         $maxAge = if ($script:watchTok -eq 'done') { 8.0 } else { 15.0 }
         $fresh  = ($script:watchTok -and ($script:watchAge -lt $maxAge))
         $target = if ($calmPose -and $fresh) { 1.0 } else { 0.0 }
@@ -2539,6 +2542,21 @@ $script:timer.Add_Tick({
                 if ((-not $script:onPlat) -and $script:shMode -eq 'none' -and $script:rand.NextDouble() -lt 0.01) {
                     Start-Shadow
                     return
+                }
+                # Working: while Claude Code is active Clawd often "works" alongside it; also
+                # a rare ambient idle animation. Bounded performance, spaced out by busyUntil so
+                # he never thrashes between busy poses (shared with Cooking).
+                if ($script:globalT -ge $script:busyUntil) {
+                    $working = ($script:featWatch -and $script:watchTok -and $script:watchTok -ne 'done' -and $script:watchAge -lt 15.0)
+                    $chance = if ($working) { 0.30 } else { 0.03 }   # rare when Claude is idle
+                    if ($script:lastBusy -eq 'work') { $chance *= 0.5 }   # don't repeat back-to-back
+                    if ($script:rand.NextDouble() -lt $chance) {
+                        $dur = $script:rand.Next(300, 440)   # ~5-7s of the GIF
+                        $script:busyUntil = $script:globalT + $dur + $script:rand.Next(500, 900)
+                        $script:lastBusy = 'work'
+                        Set-State 'work' $dur
+                        return
+                    }
                 }
                 # Mischief: perched on a window? sometimes drags it (~20%)
                 if ($script:featMisch -and $script:onPlat -and $script:fx -eq 'none' -and $script:rand.NextDouble() -lt 0.20) {
