@@ -540,6 +540,10 @@ $script:gifStates = @{}; $script:gifSrc = @{}
 $script:gifStates['dance'] = $script:imgDance; $script:gifSrc['dance'] = (Get-GifSrc $script:imgDance 267 230 14 18 226 209)
 $script:gifStates['work']  = $script:imgWork;  $script:gifSrc['work']  = (Get-GifSrc $script:imgWork  438 230 22 24 372 205)
 $script:gifStates['cook']  = $script:imgCook;  $script:gifSrc['cook']  = (Get-GifSrc $script:imgCook  504 368 12 14 446 347)
+# Per-GIF size nudge on top of the idle-match scale (1.0 = match idle footprint). Cooking's
+# pan reaches out to the side, inflating its bounds, so its crab reads small - bump it to fill
+# the window. Clamped to the window afterwards, so it never clips.
+$script:gifScale = @{ 'cook' = 1.4 }
 
 # Crab area inside the 2750x1850 canvas: x 736..1935, y 351..1850 (feet at the bottom)
 $script:srcRect = New-Object System.Drawing.Rectangle(736, 351, 1200, 1499)
@@ -1481,6 +1485,7 @@ function Render-Pet($g) {
         # (destW) OR the height reaches the idle crab height (crabH) - whichever needs more - so he
         # never looks smaller than idle in either dimension. Clamp to the window to avoid clipping.
         $scale = [Math]::Max($script:destW / [double]$src.Width, $script:crabH / [double]$src.Height)
+        if ($script:gifScale.ContainsKey($script:state)) { $scale *= $script:gifScale[$script:state] }
         if (($src.Width * $scale) -gt $script:formW) { $scale = $script:formW / [double]$src.Width }
         if (($src.Height * $scale) -gt $script:destH) { $scale = $script:destH / [double]$src.Height }
         $dw  = [int]($src.Width * $scale)
