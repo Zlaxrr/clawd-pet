@@ -529,9 +529,17 @@ $script:imgCook  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-
 # Standalone GIFs: already cropped to the character (not the 2750x1850 canvas), so they are
 # drawn WHOLE - scaled to fit the window and bottom-aligned - instead of via $script:srcRect.
 # Played frame-by-frame with ImageAnimator, exactly like Clawd-Waving / Clawd-JumpingHappy.
-$script:gifStates = @{ 'dance' = $script:imgDance }
-$script:gifStates['work'] = $script:imgWork
-$script:gifStates['cook'] = $script:imgCook
+# $gifSrc holds each GIF's character-content sub-rectangle so the transparent padding around
+# him is cropped out and he renders as large as the idle sprite. Bounds were measured from the
+# shipped assets; if an asset's canvas size differs (re-exported), fall back to the full frame.
+function Get-GifSrc($img, [int]$cw, [int]$ch, [int]$x, [int]$y, [int]$w, [int]$h) {
+    if ($img.Width -eq $cw -and $img.Height -eq $ch) { return New-Object System.Drawing.Rectangle($x, $y, $w, $h) }
+    return New-Object System.Drawing.Rectangle(0, 0, $img.Width, $img.Height)
+}
+$script:gifStates = @{}; $script:gifSrc = @{}
+$script:gifStates['dance'] = $script:imgDance; $script:gifSrc['dance'] = (Get-GifSrc $script:imgDance 267 230 14 18 226 209)
+$script:gifStates['work']  = $script:imgWork;  $script:gifSrc['work']  = (Get-GifSrc $script:imgWork  438 230 22 24 372 205)
+$script:gifStates['cook']  = $script:imgCook;  $script:gifSrc['cook']  = (Get-GifSrc $script:imgCook  504 368 12 14 446 347)
 
 # Crab area inside the 2750x1850 canvas: x 736..1935, y 351..1850 (feet at the bottom)
 $script:srcRect = New-Object System.Drawing.Rectangle(736, 351, 1200, 1499)
@@ -1454,14 +1462,17 @@ function Render-Pet($g) {
     # the same smooth playback as Clawd-Waving / Clawd-JumpingHappy.
     if ($script:gifStates.ContainsKey($script:state)) {
         $img = $script:gifStates[$script:state]
+        $src = $script:gifSrc[$script:state]
         [System.Drawing.ImageAnimator]::UpdateFrames($img)
-        $fit = [Math]::Min($script:destW / [double]$img.Width, $script:destH / [double]$img.Height)
-        $dw  = [single]($img.Width * $fit)
-        $dh  = [single]($img.Height * $fit)
-        $dx  = [single]($script:margin + ($script:destW - $dw) / 2.0)
-        $dy  = [single]($script:destH - $dh)
+        # Fit the character bounds into the FULL window width (margins included) so he renders
+        # as large as the idle sprite; bottom-aligned so his feet stay on the floor.
+        $fit = [Math]::Min($script:formW / [double]$src.Width, $script:destH / [double]$src.Height)
+        $dw  = [int]($src.Width * $fit)
+        $dh  = [int]($src.Height * $fit)
+        $dx  = [int](($script:formW - $dw) / 2.0)
+        $dy  = [int]($script:destH - $dh)
         $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-        $g.DrawImage($img, $dx, $dy, $dw, $dh)
+        $g.DrawImage($img, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)), $src, [System.Drawing.GraphicsUnit]::Pixel)
         return
     }
 
