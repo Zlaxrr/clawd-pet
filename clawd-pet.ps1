@@ -527,8 +527,11 @@ $script:imgWork  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-
 $script:imgCook  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Cooking.gif'))
 # Claude Watch "loading" indicator: the official animated spark, replacing the old hand-drawn
 # throb. Animates continuously; only painted (faded) into the status bubble while it is shown.
-$script:imgLoad  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Loading.gif'))
-[ClawdAnim]::Start($script:imgLoad)
+$script:imgLoad   = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Loading.gif'))
+# Stepped manually (not via ImageAnimator) so we can run it faster than its native ~4s/loop.
+$script:imgLoadFD = New-Object System.Drawing.Imaging.FrameDimension($script:imgLoad.FrameDimensionsList[0])
+$script:imgLoadN  = $script:imgLoad.GetFrameCount($script:imgLoadFD)
+$script:loadSpeed = 0.75   # frames advanced per 16ms tick (native ~0.30 = ~2.5x faster; raise = faster)
 
 # Standalone GIFs: already cropped to the character (not the 2750x1850 canvas), so they are
 # drawn WHOLE - scaled to fit the window and bottom-aligned - instead of via $script:srcRect.
@@ -1791,7 +1794,7 @@ function Render-Status {
     # instead. Painted at the same spot as the old spark: left gap of the bubble (centre x = 14),
     # vertically centred in the bubble body, faded with the bubble (watchVis).
     if ($tok -ne 'done') {
-        [System.Drawing.ImageAnimator]::UpdateFrames($script:imgLoad)
+        [void]$script:imgLoad.SelectActiveFrame($script:imgLoadFD, ([int]($script:globalT * $script:loadSpeed) % $script:imgLoadN))
         $bodyH = $bh - $script:statusTail
         $ls = [int]([Math]::Max(14, [Math]::Min(20, $bodyH - 4)))
         $lx = [int](14 - $ls / 2.0)
