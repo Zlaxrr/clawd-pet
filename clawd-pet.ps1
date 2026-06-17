@@ -522,6 +522,12 @@ $script:imgStill = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-
 $script:imgWave  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Waving.gif'))
 $script:imgJump  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-JumpingHappy.gif'))
 $script:imgLurk  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Lurking.gif'))
+$script:imgDance = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Dancing.gif'))
+
+# Standalone GIFs: already cropped to the character (not the 2750x1850 canvas), so they are
+# drawn WHOLE - scaled to fit the window and bottom-aligned - instead of via $script:srcRect.
+# Played frame-by-frame with ImageAnimator, exactly like Clawd-Waving / Clawd-JumpingHappy.
+$script:gifStates = @{ 'dance' = $script:imgDance }
 
 # Crab area inside the 2750x1850 canvas: x 736..1935, y 351..1850 (feet at the bottom)
 $script:srcRect = New-Object System.Drawing.Rectangle(736, 351, 1200, 1499)
@@ -726,7 +732,9 @@ $script:dragOff   = New-Object System.Drawing.Point(0, 0)
 $script:dragStart = New-Object System.Drawing.Point(0, 0)
 $script:moved     = $false
 $script:globalT   = [double]0
-$script:fx        = 'none'   # none | hop | wiggle | squash | dance | lookaround | doze
+$script:fx        = 'none'   # none | hop | wiggle | squash | lookaround | doze
+$script:busyUntil = 0        # globalT until which Working/Cooking stays on cooldown (anti-thrash)
+$script:lastBusy  = ''       # which busy animation ran last ('work' | 'cook') - to alternate
 $script:fxTicks   = 0
 $script:fxTotal   = 1
 $script:blinkTicks= 0
@@ -898,12 +906,13 @@ function Get-CurrentImage {
 }
 
 function Set-State([string]$s, [int]$durTicks) {
-    foreach ($img in @($script:imgWave, $script:imgJump, $script:imgLurk)) { [ClawdAnim]::Stop($img) }
+    foreach ($img in @($script:imgWave, $script:imgJump, $script:imgLurk, $script:imgDance)) { [ClawdAnim]::Stop($img) }
     $script:state = $s
     $script:ticks = $durTicks
-    if ($s -eq 'wave') { [ClawdAnim]::Start($script:imgWave) }
-    if ($s -eq 'jump') { [ClawdAnim]::Start($script:imgJump) }
-    if ($s -eq 'lurk') { [ClawdAnim]::Start($script:imgLurk) }
+    if ($s -eq 'wave')  { [ClawdAnim]::Start($script:imgWave) }
+    if ($s -eq 'jump')  { [ClawdAnim]::Start($script:imgJump) }
+    if ($s -eq 'lurk')  { [ClawdAnim]::Start($script:imgLurk) }
+    if ($s -eq 'dance') { [ClawdAnim]::Start($script:imgDance) }
     Update-PetVisual
 }
 
@@ -1433,6 +1442,23 @@ function Render-Pet($g) {
         return
     }
 
+    # ===== STANDALONE GIF STATES: dance / work / cook =====
+    # These GIFs are already cropped to the character, so draw the WHOLE frame scaled to fit
+    # the window and bottom-aligned (feet on the floor). Frame-by-frame via ImageAnimator -
+    # the same smooth playback as Clawd-Waving / Clawd-JumpingHappy.
+    if ($script:gifStates.ContainsKey($script:state)) {
+        $img = $script:gifStates[$script:state]
+        [System.Drawing.ImageAnimator]::UpdateFrames($img)
+        $fit = [Math]::Min($script:destW / [double]$img.Width, $script:destH / [double]$img.Height)
+        $dw  = [single]($img.Width * $fit)
+        $dh  = [single]($img.Height * $fit)
+        $dx  = [single]($script:margin + ($script:destW - $dw) / 2.0)
+        $dy  = [single]($script:destH - $dh)
+        $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $g.DrawImage($img, $dx, $dy, $dw, $dh)
+        return
+    }
+
     # ===== NORMAL MODE =====
     $cur = Get-CurrentImage
     if ([System.Drawing.ImageAnimator]::CanAnimate($cur)) {
@@ -1488,18 +1514,6 @@ function Render-Pet($g) {
             $damp = $script:fxTicks / [double]$script:fxTotal
             $angle = 10.0 * [Math]::Sin($wp) * $damp
             $g.TranslateTransform($cx, $bottom); $g.RotateTransform($angle); $g.TranslateTransform(-$cx, -$bottom)
-        }
-        'dance' {
-            # Dancing: stretch vertically in place (feet planted, pivot at $bottom),
-            # constant width - pattern measured from the Claude dance GIF. Smooth & tidy.
-            $els  = $script:fxTotal - $script:fxTicks
-            $beat = $els * 0.34
-            $t    = 0.5 + 0.5 * [Math]::Sin($beat)
-            $t    = $t * $t * (3.0 - 2.0 * $t)   # smoothstep: pop then hold the pose
-            $sy   = [single](1.0 + 0.10 * $t)
-            $g.TranslateTransform($cx, $bottom)
-            $g.ScaleTransform(1.0, $sy)
-            $g.TranslateTransform(-$cx, -$bottom)
         }
         'lookaround' {
             $angle = 2.0 * [Math]::Sin(($script:fxTotal - $script:fxTicks) * 0.06)
@@ -1560,7 +1574,7 @@ function Render-Pet($g) {
         $dest = New-Object System.Drawing.Rectangle($script:margin, $y, $script:destW, $script:destH)
         $g.DrawImage($cur, $dest, $script:srcRect, [System.Drawing.GraphicsUnit]::Pixel)
         if ($baseSprite -and $script:blinkTicks -le 0) {
-            Draw-Eyes $g ([single]$script:margin) ([single]$y) $false ($script:fx -eq 'dance')
+            Draw-Eyes $g ([single]$script:margin) ([single]$y) $false
         }
     }
 
@@ -1593,7 +1607,6 @@ function Render-Pet($g) {
     if ($script:shMode -eq 'show' -and $script:shT -ge 85 -and $script:shT -lt 170) { $glyph = 'ex' }
     elseif ($script:qmTicks -gt 0) { $glyph = 'qm' }
     elseif ($script:fx -eq 'doze') { $glyph = 'zz' }
-    elseif ($script:fx -eq 'dance') { $glyph = 'note' }
     if ($glyph) {
         $g.ResetTransform()
         $bob = [single](1.5 * [Math]::Sin($script:globalT * 0.1))
@@ -1817,7 +1830,7 @@ $script:timer.Add_Tick({
         # fx like hop / look-around), wave, hide (duck), and jump. Still hidden during the big
         # "performances" (dance, sleep) and the special modes (dragging, balloon, meteor shower,
         # shadow); heavier states (fall/climb/push/code/...) fall out by not being whitelisted.
-        $gentleIdle = ((($script:state -eq 'idle') -or ($script:state -eq 'walk')) -and ($script:fx -ne 'dance') -and ($script:fx -ne 'doze'))
+        $gentleIdle = ((($script:state -eq 'idle') -or ($script:state -eq 'walk')) -and ($script:fx -ne 'doze'))
         $calmPose = (($gentleIdle -or ($script:state -eq 'wave') -or ($script:state -eq 'jump')) -and (-not $script:dragging) -and ($script:balMode -eq 'none') -and (-not $script:starActive) -and ($script:shMode -eq 'none'))
         $maxAge = if ($script:watchTok -eq 'done') { 8.0 } else { 15.0 }
         $fresh  = ($script:watchTok -and ($script:watchAge -lt $maxAge))
@@ -2584,8 +2597,7 @@ $script:timer.Add_Tick({
                 } elseif ($r -lt 0.62) {
                     Set-State 'jump' 190   # jump 14%
                 } elseif ($r -lt 0.72) {
-                    Start-Fx 'dance' 200   # dance 10%
-                    Set-State 'idle' $script:rand.Next($script:idleMinT, $script:idleMaxT)
+                    Set-State 'dance' $script:rand.Next(280, 380)   # dance 10% (~4.5-6s of the GIF)
                 } elseif ($r -lt 0.82) {
                     Start-Fx 'lookaround' 170   # look around 10%
                     Set-State 'idle' $script:rand.Next($script:idleMinT, $script:idleMaxT)
@@ -2729,7 +2741,7 @@ $script:form.Add_MouseUp({
         $r = $script:rand.NextDouble()
         if ($r -lt 0.40)     { Set-State 'wave' 240 }
         elseif ($r -lt 0.75) { Set-State 'jump' 190 }
-        else                 { Start-Fx 'dance' 200; Set-State 'idle' $script:rand.Next($script:idleMinT, $script:idleMaxT) }
+        else                 { Set-State 'dance' $script:rand.Next(280, 380) }
     }
 })
 
@@ -2784,7 +2796,7 @@ $miBal.Add_Click({
 $miCode = $menu.Items.Add('Hello World!')
 $miCode.Add_Click({ Set-State 'code' 380 })
 $miDance = $menu.Items.Add('Dance')
-$miDance.Add_Click({ Start-Fx 'dance' 200; Set-State 'idle' 500 })
+$miDance.Add_Click({ Set-State 'dance' 340 })
 $miDuck = $menu.Items.Add('Hide')
 $miDuck.Add_Click({ Start-Fx 'duck' 300; Set-State 'idle' 500 })
 $miDoze = $menu.Items.Add('Sleep')
