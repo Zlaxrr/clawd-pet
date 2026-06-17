@@ -525,6 +525,10 @@ $script:imgLurk  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-
 $script:imgDance = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Dancing.gif'))
 $script:imgWork  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Working.gif'))
 $script:imgCook  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Cooking.gif'))
+# Claude Watch "loading" indicator: the official animated spark, replacing the old hand-drawn
+# throb. Animates continuously; only painted (faded) into the status bubble while it is shown.
+$script:imgLoad  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Loading.gif'))
+[ClawdAnim]::Start($script:imgLoad)
 
 # Standalone GIFs: already cropped to the character (not the 2750x1850 canvas), so they are
 # drawn WHOLE - scaled to fit the window and bottom-aligned - instead of via $script:srcRect.
@@ -1692,29 +1696,6 @@ function New-RoundRect([single]$x, [single]$y, [single]$w, [single]$h, [single]$
 $script:statusFmt = [System.Drawing.StringFormat]::GenericTypographic.Clone()
 $script:statusFmt.FormatFlags = $script:statusFmt.FormatFlags -bor [System.Drawing.StringFormatFlags]::MeasureTrailingSpaces
 
-function Draw-ClaudeSpark($g, [single]$cx, [single]$cy, [int]$alpha, [single]$scale) {
-    # 6-arm spark: all arms equal length with EQUAL 60-degree gaps (3 lines at 30/90/150, so
-    # one arm points straight up). Straight pen strokes through the center, six tips on one
-    # circle. The throb scales the ARM LENGTH only (pen width stays fixed): at the bottom of
-    # the pulse the arms collapse under the round caps, so the spark shrinks to a single dot.
-    $col = [System.Drawing.Color]::FromArgb($alpha, 217, 119, 87)
-    $pen = New-Object System.Drawing.Pen $col, ([single]1.5)
-    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
-    $st = $g.Save()
-    $g.SmoothingMode = 'AntiAlias'
-    $g.TranslateTransform($cx, $cy)
-    $r = [single](5.0 * $scale)
-    foreach ($ang in 30, 90, 150) {   # 3 lines, 60 degrees apart = 6 evenly spaced arms
-        $rad = $ang * [Math]::PI / 180.0
-        $dx  = [single]($r * [Math]::Cos($rad))
-        $dy  = [single]($r * [Math]::Sin($rad))
-        $g.DrawLine($pen, (-$dx), (-$dy), $dx, $dy)
-    }
-    $g.Restore($st)
-    $pen.Dispose()
-}
-
 function Build-StatusBubble([string]$tok) {
     $done = ($tok -eq 'done')
     $txt = if ($done) { $script:doneMsg } else { $script:watchText[$tok] }
@@ -1791,30 +1772,21 @@ function Render-Status {
     $rect = New-Object System.Drawing.Rectangle 0, 0, $bw, $bh
     $g.DrawImage($bub, $rect, 0, 0, $bw, $bh, [System.Drawing.GraphicsUnit]::Pixel, $ia)
     $ia.Dispose()
-    # Spark like the Claude Code loading (the "live" indicator); done already has a checkmark
+    # Loading spark (the "live" indicator), now the official animated GIF; done shows a checkmark
+    # instead. Painted at the same spot as the old spark: left gap of the bubble (centre x = 14),
+    # vertically centred in the bubble body, faded with the bubble (watchVis).
     if ($tok -ne 'done') {
-        # The spark throbs: it RESTS at full size for ~0.5s, then a quick dip down to a single
-        # dot and straight back up (a heartbeat-style beat) while the color stays bright. Tweak
-        # the three tick counts below to taste (1 second ~= 62 ticks) and the 0.05..1.0 range
-        # for how small/big the dot and the full spark get.
-        $holdTicks = 8.0   # how long it stays at full size between beats
-        $dipTicks  = 8.0    # how fast it shrinks down to a dot (smaller = faster)
-        $riseTicks = 8.0    # how fast it grows back up to full
-        $period = $holdTicks + $dipTicks + $riseTicks
-        $ph = $script:globalT % $period
-        if ($ph -lt $holdTicks) {
-            $p = 1.0                                                                  # hold at full
-        } elseif ($ph -lt ($holdTicks + $dipTicks)) {
-            $f = ($ph - $holdTicks) / $dipTicks;            $p = 1.0 - ($f * $f * (3.0 - 2.0 * $f))   # full -> dot (eased)
-        } else {
-            $f = ($ph - $holdTicks - $dipTicks) / $riseTicks; $p = $f * $f * (3.0 - 2.0 * $f)         # dot -> full (eased)
-        }
-        $scale = [single](0.05 + 0.95 * $p)
-        $a = [int](255 * $vis)
-        if ($a -gt 0) {
-            $iy = [single](($bh - $script:statusTail) / 2.0)
-            Draw-ClaudeSpark $g 14 $iy $a $scale   # cx 14 = leave a gap on the left
-        }
+        [System.Drawing.ImageAnimator]::UpdateFrames($script:imgLoad)
+        $bodyH = $bh - $script:statusTail
+        $ls = [int]([Math]::Max(14, [Math]::Min(20, $bodyH - 4)))
+        $lx = [int](14 - $ls / 2.0)
+        $ly = [int](($bodyH - $ls) / 2.0)
+        $ia2 = New-Object System.Drawing.Imaging.ImageAttributes
+        $cm2 = New-Object System.Drawing.Imaging.ColorMatrix
+        $cm2.Matrix33 = $vis
+        $ia2.SetColorMatrix($cm2)
+        $g.DrawImage($script:imgLoad, (New-Object System.Drawing.Rectangle($lx, $ly, $ls, $ls)), 0, 0, $script:imgLoad.Width, $script:imgLoad.Height, [System.Drawing.GraphicsUnit]::Pixel, $ia2)
+        $ia2.Dispose()
     }
     # Position: centered above the head; rises smoothly 6px on fade-in.
     # For the standalone GIFs (work/cook) use the actual drawn top so the bubble never
