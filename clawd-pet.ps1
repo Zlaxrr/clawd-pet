@@ -1477,10 +1477,12 @@ function Render-Pet($g) {
         $img = $script:gifStates[$script:state]
         $src = $script:gifSrc[$script:state]
         [System.Drawing.ImageAnimator]::UpdateFrames($img)
-        # Match the idle sprite's footprint: scale so the character's height equals the idle crab
-        # height (crabH), clamped to the window width, centered, bottom-aligned (feet on the floor).
-        $scale = $script:crabH / [double]$src.Height
+        # Size to match the idle crab: scale up until either the width reaches the sprite width
+        # (destW) OR the height reaches the idle crab height (crabH) - whichever needs more - so he
+        # never looks smaller than idle in either dimension. Clamp to the window to avoid clipping.
+        $scale = [Math]::Max($script:destW / [double]$src.Width, $script:crabH / [double]$src.Height)
         if (($src.Width * $scale) -gt $script:formW) { $scale = $script:formW / [double]$src.Width }
+        if (($src.Height * $scale) -gt $script:destH) { $scale = $script:destH / [double]$src.Height }
         $dw  = [int]($src.Width * $scale)
         $dh  = [int]($src.Height * $scale)
         $dx  = [int](($script:formW - $dw) / 2.0)
