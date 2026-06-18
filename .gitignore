@@ -1,5 +1,7 @@
 # Official Anthropic assets - downloaded by download-assets.ps1, never committed
 assets/
+# Custom assets bundled with the repo (not from Anthropic)
+!assets/Clawd-CookIntro.gif
 
 # Windows junk
 Thumbs.db

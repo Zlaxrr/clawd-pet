@@ -524,7 +524,10 @@ $script:imgJump  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-
 $script:imgLurk  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Lurking.gif'))
 $script:imgDance = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Dancing.gif'))
 $script:imgWork  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Working.gif'))
-$script:imgCook  = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Cooking.gif'))
+$script:imgCook      = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Cooking.gif'))
+$script:imgCookIntro = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-CookIntro.gif'))
+$script:imgCookIntroFD = New-Object System.Drawing.Imaging.FrameDimension($script:imgCookIntro.FrameDimensionsList[0])
+$script:imgCookIntroN  = $script:imgCookIntro.GetFrameCount($script:imgCookIntroFD)
 # Claude Watch "loading" indicator: the official animated spark, replacing the old hand-drawn
 # throb. Animates continuously; only painted (faded) into the status bubble while it is shown.
 $script:imgLoad   = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd-Loading.gif'))
@@ -762,7 +765,8 @@ $script:globalT   = [double]0
 $script:fx        = 'none'   # none | hop | wiggle | squash | lookaround | doze
 $script:busyUntil = 0        # globalT until which Working/Cooking stays on cooldown (anti-thrash)
 $script:lastBusy  = ''       # which busy animation ran last ('work' | 'cook') - to alternate
-$script:workAnim  = ''       # the single animation locked in for the current Claude-working session
+$script:workAnim      = ''       # the single animation locked in for the current Claude-working session
+$script:cookIntroFrame = [double]0  # manual frame counter for cook-intro (like loading GIF)
 $script:gifHeadX   = 0       # window-relative x of Clawd's head in the current standalone GIF
 $script:gifHeadTop = 0       # window-relative y of the top of his head in the current standalone GIF
 $script:everydayStates = @('idle', 'walk', 'wave', 'jump', 'dance')   # poses that yield to a work session
@@ -945,7 +949,8 @@ function Set-State([string]$s, [int]$durTicks) {
     if ($s -eq 'lurk')  { [ClawdAnim]::Start($script:imgLurk) }
     if ($s -eq 'dance') { [ClawdAnim]::Start($script:imgDance) }
     if ($s -eq 'work')  { [ClawdAnim]::Start($script:imgWork) }
-    if ($s -eq 'cook')  { [ClawdAnim]::Start($script:imgCook) }
+    if ($s -eq 'cook')       { [ClawdAnim]::Start($script:imgCook) }
+    if ($s -eq 'cook-intro') { $script:cookIntroFrame = 0.0 }
     Update-PetVisual
 }
 
@@ -978,8 +983,11 @@ function Start-WorkSession {
     }
     if ($script:state -eq $script:workAnim) {
         $script:ticks = $script:rand.Next(320, 460)   # already in it - keep going, no restart
+    } elseif ($script:state -eq 'cook-intro') {
+        # intro still playing - let it finish naturally, don't interrupt
     } else {
-        Set-State $script:workAnim $script:rand.Next(320, 460)
+        $startState = if ($script:workAnim -eq 'cook') { 'cook-intro' } else { $script:workAnim }
+        Set-State $startState 50   # cook-intro auto-transitions; work goes directly
     }
 }
 
@@ -1503,6 +1511,24 @@ function Render-Pet($g) {
         return
     }
 
+    # ===== COOK-INTRO: manual frame step, plays once then auto-transitions to cook =====
+    if ($script:state -eq 'cook-intro') {
+        $frame = [int]$script:cookIntroFrame % $script:imgCookIntroN
+        [void]$script:imgCookIntro.SelectActiveFrame($script:imgCookIntroFD, $frame)
+        # Content rect: skip only row-0 stage dots; hat enters from y=24 in zoom-in frames
+        $src   = New-Object System.Drawing.Rectangle(2, 1, 258, 250)
+        $scale = [Math]::Max($script:destW / [double]$src.Width, $script:crabH / [double]$src.Height) * 0.95
+        if (($src.Width  * $scale) -gt $script:formW) { $scale = $script:formW / [double]$src.Width }
+        if (($src.Height * $scale) -gt $script:destH) { $scale = $script:destH / [double]$src.Height }
+        $dw = [int]($src.Width * $scale); $dh = [int]($src.Height * $scale)
+        $dx = [int](($script:formW - $dw) / 2.0); $dy = [int]($script:destH - $dh)
+        $script:gifHeadX   = [int]($script:formW / 2.0)
+        $script:gifHeadTop = $dy
+        $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $g.DrawImage($script:imgCookIntro, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)), $src, [System.Drawing.GraphicsUnit]::Pixel)
+        return
+    }
+
     # ===== STANDALONE GIF STATES: dance / work / cook =====
     # These GIFs are already cropped to the character, so draw the WHOLE frame scaled to fit
     # the window and bottom-aligned (feet on the floor). Frame-by-frame via ImageAnimator -
@@ -1883,7 +1909,7 @@ $script:timer.Add_Tick({
         # "performances" (dance, sleep) and the special modes (dragging, balloon, meteor shower,
         # shadow); heavier states (fall/climb/push/code/...) fall out by not being whitelisted.
         $gentleIdle = ((($script:state -eq 'idle') -or ($script:state -eq 'walk')) -and ($script:fx -ne 'doze'))
-        $calmPose = (($gentleIdle -or ($script:state -eq 'wave') -or ($script:state -eq 'jump') -or ($script:state -eq 'work') -or ($script:state -eq 'cook')) -and (-not $script:dragging) -and ($script:balMode -eq 'none') -and (-not $script:starActive) -and ($script:shMode -eq 'none'))
+        $calmPose = (($gentleIdle -or ($script:state -eq 'wave') -or ($script:state -eq 'jump') -or ($script:state -eq 'work') -or ($script:state -eq 'cook') -or ($script:state -eq 'cook-intro')) -and (-not $script:dragging) -and ($script:balMode -eq 'none') -and (-not $script:starActive) -and ($script:shMode -eq 'none'))
         $maxAge = if ($script:watchTok -eq 'done') { 8.0 } else { 15.0 }
         $fresh  = ($script:watchTok -and ($script:watchAge -lt $maxAge))
         $target = if ($calmPose -and $fresh) { 1.0 } else { 0.0 }
@@ -1893,6 +1919,15 @@ $script:timer.Add_Tick({
         # (no trailing/freezing). watchVis keeps easing to 0 so it fades back in cleanly later.
         if ($calmPose -and $script:watchVis -gt 0.001) { Render-Status }
         elseif ($script:statusOv.Visible) { $script:statusOv.Hide() }
+    }
+
+    # Advance cook-intro frame; when all frames done, cut to the main cooking loop
+    if ($script:state -eq 'cook-intro') {
+        $script:cookIntroFrame += 0.5   # 17 frames / 34 ticks ≈ 0.57 s at 60fps
+        if ($script:cookIntroFrame -ge $script:imgCookIntroN) {
+            $script:cookIntroFrame = 0.0
+            Set-State 'cook' ($script:rand.Next(320, 460))
+        }
     }
 
     # While Claude Code is working, lock Clawd into ONE animation (Working or Cooking) for the whole
@@ -1906,7 +1941,7 @@ $script:timer.Add_Tick({
     } elseif ($script:workAnim -ne '') {
         # Claude finished and the status text is gone -> end the work animation right now
         $script:workAnim = ''
-        if ($script:state -eq 'work' -or $script:state -eq 'cook') {
+        if ($script:state -eq 'work' -or $script:state -eq 'cook' -or $script:state -eq 'cook-intro') {
             Set-State 'idle' $script:rand.Next($script:idleMinT, $script:idleMaxT)
         }
     }
@@ -2881,7 +2916,7 @@ $miDance.Add_Click({ Set-State 'dance' 340 })
 $miWork = $menu.Items.Add('Working')
 $miWork.Add_Click({ $script:lastBusy = 'work'; Set-State 'work' 460 })
 $miCook = $menu.Items.Add('Cooking')
-$miCook.Add_Click({ $script:lastBusy = 'cook'; Set-State 'cook' 460 })
+$miCook.Add_Click({ $script:lastBusy = 'cook'; Set-State 'cook-intro' 50 })
 $miDuck = $menu.Items.Add('Hide')
 $miDuck.Add_Click({ Start-Fx 'duck' 300; Set-State 'idle' 500 })
 $miDoze = $menu.Items.Add('Sleep')
