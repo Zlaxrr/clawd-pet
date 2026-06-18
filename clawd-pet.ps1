@@ -763,9 +763,9 @@ $script:fx        = 'none'   # none | hop | wiggle | squash | lookaround | doze
 $script:busyUntil = 0        # globalT until which Working/Cooking stays on cooldown (anti-thrash)
 $script:lastBusy  = ''       # which busy animation ran last ('work' | 'cook') - to alternate
 $script:workAnim  = ''       # the single animation locked in for the current Claude-working session
-$script:gifDrawTop = 0       # y of the top of the last standalone GIF drawn (for bubble placement)
 $script:gifHeadX   = 0       # window-relative x of Clawd's head in the current standalone GIF
 $script:gifHeadTop = 0       # window-relative y of the top of his head in the current standalone GIF
+$script:everydayStates = @('idle', 'walk', 'wave', 'jump', 'dance')   # poses that yield to a work session
 $script:fxTicks   = 0
 $script:fxTotal   = 1
 $script:blinkTicks= 0
@@ -1522,7 +1522,6 @@ function Render-Pet($g) {
         $dh  = [int]($src.Height * $scale)
         $dx  = [int](($script:formW - $dw) / 2.0)
         $dy  = [int]($script:destH - $dh)
-        $script:gifDrawTop = $dy
         # Map the head anchor (GIF pixel coords) to this window so the bubble sits over his head.
         if ($script:gifHead.ContainsKey($script:state)) {
             $ha = $script:gifHead[$script:state]
@@ -1900,9 +1899,8 @@ $script:timer.Add_Tick({
     # session - it loops until Claude is done, then ends together with the status text. No wandering,
     # dancing, or mischief meanwhile. Everyday poses are interrupted at once (bigger one-off
     # performances are left to finish; the transition picker keeps the loop going afterwards).
-    $busyStates = @('idle', 'walk', 'wave', 'jump', 'dance')
     if (Test-ClaudeWorking) {
-        if (-not $script:dragging -and $script:fx -eq 'none' -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none' -and ($busyStates -contains $script:state)) {
+        if (-not $script:dragging -and $script:fx -eq 'none' -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none' -and ($script:everydayStates -contains $script:state)) {
             Start-WorkSession
         }
     } elseif ($script:workAnim -ne '') {
