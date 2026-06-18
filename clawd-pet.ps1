@@ -534,7 +534,7 @@ $script:imgLoad   = [System.Drawing.Image]::FromFile((Join-Path $assetDir 'Clawd
 # Stepped manually (not via ImageAnimator) so we can run it faster than its native ~4s/loop.
 $script:imgLoadFD = New-Object System.Drawing.Imaging.FrameDimension($script:imgLoad.FrameDimensionsList[0])
 $script:imgLoadN  = $script:imgLoad.GetFrameCount($script:imgLoadFD)
-$script:loadSpeed = 0.6    # frames advanced per 16ms tick (native ~0.30 = ~2x faster; raise = faster)
+$script:loadSpeed = 0.45   # frames advanced per 16ms tick (native ~0.30 = ~2x faster; raise = faster)
 
 # Standalone GIFs: already cropped to the character (not the 2750x1850 canvas), so they are
 # drawn WHOLE - scaled to fit the window and bottom-aligned - instead of via $script:srcRect.
