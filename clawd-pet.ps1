@@ -505,7 +505,8 @@ $script:termOut   = [string](Get-Cfg 'terminal.output' 'Hello, World!')
 
 # ---------- Official assets ----------
 $assetDir = Join-Path $PSScriptRoot 'assets'
-$neededAssets = @('Clawd-Still.png', 'Clawd-CrabWalking.gif', 'Clawd-Waving.gif', 'Clawd-JumpingHappy.gif', 'Clawd-Lurking.gif')
+$neededAssets = @('Clawd-Still.png', 'Clawd-CrabWalking.gif', 'Clawd-Waving.gif', 'Clawd-JumpingHappy.gif', 'Clawd-Lurking.gif',
+                  'Clawd-Dancing.gif', 'Clawd-Working.gif', 'Clawd-Loading.gif', 'Clawd-Cooking.gif')
 $missingAssets = @($neededAssets | Where-Object { -not (Test-Path (Join-Path $assetDir $_)) })
 if ($missingAssets.Count -gt 0) {
     # Assets missing -> auto-download from claude.ai

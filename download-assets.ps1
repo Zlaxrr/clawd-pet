@@ -8,7 +8,8 @@ New-Item -ItemType Directory -Force $assetDir | Out-Null
 
 $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 $base = 'https://claude.ai/images/clawd/core/'
-$files = @('Clawd-Still.png', 'Clawd-CrabWalking.gif', 'Clawd-Waving.gif', 'Clawd-JumpingHappy.gif', 'Clawd-Lurking.gif')
+$files = @('Clawd-Still.png', 'Clawd-CrabWalking.gif', 'Clawd-Waving.gif', 'Clawd-JumpingHappy.gif', 'Clawd-Lurking.gif',
+           'Clawd-Dancing.gif', 'Clawd-Working.gif', 'Clawd-Loading.gif', 'Clawd-Cooking.gif')
 
 $ok = 0
 foreach ($f in $files) {
