@@ -2,6 +2,7 @@
 assets/
 # Custom assets bundled with the repo (not from Anthropic)
 !assets/Clawd-CookIntro.gif
+!assets/Clawd-Dancing.gif
 
 # Windows junk
 Thumbs.db
