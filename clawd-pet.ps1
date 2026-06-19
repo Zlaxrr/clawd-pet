@@ -975,11 +975,10 @@ function Start-BusyNext {
 }
 
 # Keep Clawd in ONE animation (Working or Cooking) for the whole Claude-working session: the
-# choice is picked once (alternating across sessions) and held until Claude is done. Calling this
-# again while already in that animation just extends it, so the GIF loops without restarting.
+# choice is picked once per session and held until Claude is done. Cook appears ~75% of the time.
 function Start-WorkSession {
     if ($script:workAnim -eq '') {
-        $script:workAnim = if ($script:lastBusy -eq 'work') { 'cook' } else { 'work' }
+        $script:workAnim = if ($script:rand.Next(4) -gt 0) { 'cook' } else { 'work' }
         $script:lastBusy = $script:workAnim
     }
     if ($script:state -eq $script:workAnim) {
