@@ -327,7 +327,7 @@ public static class ClawdFx {
 $script:chimeWav = Join-Path $env:TEMP 'clawd-chime.wav'
 if (-not (Test-Path $script:chimeWav)) {
     $sr = 22050
-    $notes = @(660, 880); $durs = @(120, 350); $gapSamp = $sr * 30 / 1000
+    $notes = @(523, 659, 784, 1047); $durs = @(80, 80, 80, 180); $gapSamp = $sr * 25 / 1000
     $totalSamp = 0; for ($i = 0; $i -lt $notes.Count; $i++) { $totalSamp += [long]($sr * $durs[$i] / 1000) + $gapSamp }
     $raw = New-Object double[] $totalSamp; $pos = 0
     for ($n = 0; $n -lt $notes.Count; $n++) {
