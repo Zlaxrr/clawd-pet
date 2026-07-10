@@ -323,6 +323,33 @@ public static class ClawdFx {
 }
 "@
 
+# Custom chime generator — sine-wave WAV cached to temp file (fast on 2nd+ launch)
+$script:chimeWav = Join-Path $env:TEMP 'clawd-chime.wav'
+if (-not (Test-Path $script:chimeWav)) {
+    $sr = 22050
+    $notes = @(660, 880); $durs = @(120, 350); $gapSamp = $sr * 30 / 1000
+    $totalSamp = 0; for ($i = 0; $i -lt $notes.Count; $i++) { $totalSamp += [long]($sr * $durs[$i] / 1000) + $gapSamp }
+    $raw = New-Object double[] $totalSamp; $pos = 0
+    for ($n = 0; $n -lt $notes.Count; $n++) {
+        $freq = $notes[$n]; $samples = [long]($sr * $durs[$n] / 1000)
+        for ($s = 0; $s -lt $samples; $s++) { $raw[$pos++] = [Math]::Sin(2 * [Math]::PI * $freq * $s / $sr) * 0.35 }
+        for ($s = 0; $s -lt $gapSamp; $s++) { $raw[$pos++] = 0 }
+    }
+    $dataBytes = [int]($totalSamp * 2)
+    $fs = [System.IO.File]::Create($script:chimeWav)
+    $w = New-Object System.IO.BinaryWriter($fs)
+    $w.Write([char[]]('RIFF')); $w.Write(36 + $dataBytes)
+    $w.Write([char[]]('WAVE')); $w.Write([char[]]('fmt ')); $w.Write(16)
+    $w.Write([uint16]1); $w.Write([uint16]1); $w.Write($sr); $w.Write($sr * 2)
+    $w.Write([uint16]2); $w.Write([uint16]16)
+    $w.Write([char[]]('data')); $w.Write($dataBytes)
+    for ($i = 0; $i -lt $totalSamp; $i++) { $w.Write([int16]($raw[$i] * 32767)) }
+    $w.Close(); $fs.Close()
+    $raw = $null
+}
+$script:chimePlayer = New-Object System.Media.SoundPlayer($script:chimeWav)
+$script:chimePlayer.Load()
+
 # Sky overlay for shooting stars: layered window with per-pixel alpha
 # (soft glow & real gradients - impossible with TransparencyKey),
 # click-through (WS_EX_TRANSPARENT) and never steals focus.
@@ -887,6 +914,9 @@ $script:whiteBrush  = New-Object System.Drawing.SolidBrush ([System.Drawing.Colo
 $script:bubbleBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(246, 238, 226))
 $script:glyphBrush  = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(70, 52, 44))
 $script:sweatBrush  = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(220, 140, 190, 235))
+
+# Build the custom clawd finish chime — three ascending notes, warm sine wave
+[ClawdChime]::Build(@(880, 1109, 1319), @(100, 100, 200))
 
 # ---------- "Claude Watch": status bubble above the head ----------
 # A Claude Code hook writes a single activity token to this file; Clawd reads it and
@@ -1889,12 +1919,15 @@ $script:timer.Add_Tick({
                             # Fresh finish: pick a random playful verb + timestamp (like Claude Code)
                             $v = $script:doneVerbs[$script:rand.Next($script:doneVerbs.Count)]
                             $script:doneMsg = "$v at $([DateTime]::Now.ToString('HH:mm'))"
+                            # Play custom chime — three ascending notes, unique clawd identity
+                            $script:chimePlayer.Play()
                             # If he dozed off, wake him up so he never sleeps through a finish
                             if ($script:fx -eq 'doze') { $script:fx = 'none'; $script:fxTicks = 0 }
                             # Hop for joy so the finish is noticeable - only from a safe, calm pose
                             if (($script:state -eq 'idle' -or $script:state -eq 'walk') -and $script:fx -eq 'none' -and -not $script:dragging -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none') {
                                 Set-State 'jump' 190
                             }
+                            # Ponytail: Windows chime on finish — zero deps, pleasant enough. Upgrade to custom WAV if branding matters.
                         }
                         $script:watchTok = $tk
                     }
