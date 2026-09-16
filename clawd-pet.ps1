@@ -11,7 +11,7 @@
 #   Right click : exit menu
 # Run with -TestBlink to test sprite generation only (no window).
 
-param([switch]$TestBlink)
+param([switch]$TestBlink, [string]$WatchLog)
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -526,7 +526,13 @@ $script:featLurk  = [bool](Get-Cfg 'features.edgeLurking' $true)
 $script:featSys   = [bool](Get-Cfg 'features.systemAwareness' $true)
 $script:featClimb = [bool](Get-Cfg 'features.climbing' $true)
 $script:featMisch = [bool](Get-Cfg 'features.mischief' $true)
-$script:featWatch = [bool](Get-Cfg 'features.claudeWatch' $true)
+$script:featClaudeWatch = [bool](Get-Cfg 'features.claudeWatch' $true)
+$script:featCodexWatch = [bool](Get-Cfg 'features.codexWatch' $false)
+$script:featWatch = [bool](Get-Cfg 'features.agentWatch' $true) -and ($script:featClaudeWatch -or $script:featCodexWatch)
+. (Join-Path $PSScriptRoot 'tools\agent-state.ps1')
+$script:codexWatchFile = Join-Path $env:TEMP "clawd-codex-$PID.json"
+$script:codexWatcher = $null
+$script:watchSource = ''
 $script:termCmd   = [string](Get-Cfg 'terminal.command' 'clawd --hello')
 $script:termOut   = [string](Get-Cfg 'terminal.output' 'Hello, World!')
 
@@ -915,8 +921,7 @@ $script:bubbleBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Colo
 $script:glyphBrush  = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(70, 52, 44))
 $script:sweatBrush  = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(220, 140, 190, 235))
 
-# Build the custom clawd finish chime — three ascending notes, warm sine wave
-[ClawdChime]::Build(@(880, 1109, 1319), @(100, 100, 200))
+# The finish chime is loaded into chimePlayer above.
 
 # ---------- "Claude Watch": status bubble above the head ----------
 # A Claude Code hook writes a single activity token to this file; Clawd reads it and
@@ -991,8 +996,8 @@ function Start-Fx([string]$f, [int]$total) {
     $script:fxTicks = $total
 }
 
-# True while Claude Code is actively working (a fresh, non-"done" Claude Watch token).
-function Test-ClaudeWorking {
+# True while a fresh agent activity is selected by the shared status layer.
+function Test-AgentWorking {
     return ($script:featWatch -and $script:watchTok -and $script:watchTok -ne 'done' -and $script:watchAge -lt 15.0)
 }
 
@@ -1874,6 +1879,16 @@ function Render-Status {
     $y = [int]($headTop - $bh - 1 + (1.0 - $vis) * 6)
     $x = [int][Math]::Max($script:wa.Left, [Math]::Min($x, ($script:wa.Right - $bw)))
     $script:statusOv.Render($script:statusBmp, $x, $y)
+    if ($WatchLog -and $script:watchVis -gt 0.9) {
+        $key = "$script:watchSource/$tok"
+        if ($script:lastWatchLogKey -ne $key) {
+            $script:lastWatchLogKey = $key
+            try {
+                [IO.File]::AppendAllText($WatchLog, ((@{at=[datetime]::UtcNow;source=$script:watchSource;token=$tok;state=$script:state;visible=$script:statusOv.Visible} | ConvertTo-Json -Compress) + [Environment]::NewLine))
+                $script:statusBub.Save("$WatchLog.$script:watchSource.$tok.png", [Drawing.Imaging.ImageFormat]::Png)
+            } catch { }
+        }
+    }
 }
 
 # ---------- State machine ----------
@@ -1911,16 +1926,18 @@ $script:timer.Add_Tick({
         if ($script:watchCheck -ge 10) {   # ~6x / second
             $script:watchCheck = 0
             try {
-                if ([System.IO.File]::Exists($script:watchFile)) {
-                    $script:watchAge = ([DateTime]::Now - [System.IO.File]::GetLastWriteTime($script:watchFile)).TotalSeconds
-                    $tk = ([System.IO.File]::ReadAllText($script:watchFile)).Trim().ToLowerInvariant()
+                if ($null -ne ($agentState = Get-ClawdDisplayState $script:featClaudeWatch $script:featCodexWatch $script:codexWatchFile $script:watchFile)) {
+                    $script:watchSource = $agentState.source
+                    $script:watchAge = ([DateTime]::UtcNow - [datetime]$agentState.at).TotalSeconds
+                    if ($script:featCodexWatch -and $agentState.token -ne 'done') { $script:watchAge = 0 }
+                    $tk = $agentState.token
                     if ($tk) {
-                        if ($tk -eq 'done' -and $script:watchTok -ne 'done') {
+                        if ($tk -eq 'done' -and $script:watchTok -ne 'done' -and $script:watchAge -lt 8) {
                             # Fresh finish: pick a random playful verb + timestamp (like Claude Code)
                             $v = $script:doneVerbs[$script:rand.Next($script:doneVerbs.Count)]
                             $script:doneMsg = "$v at $([DateTime]::Now.ToString('HH:mm'))"
                             # Play custom chime — three ascending notes, unique clawd identity
-                            $script:chimePlayer.Play()
+                            try { $script:chimePlayer.Play() } catch { } # Audio failure must not discard a completed turn.
                             # If he dozed off, wake him up so he never sleeps through a finish
                             if ($script:fx -eq 'doze') { $script:fx = 'none'; $script:fxTicks = 0 }
                             # Hop for joy so the finish is noticeable - only from a safe, calm pose
@@ -1966,7 +1983,7 @@ $script:timer.Add_Tick({
     # session - it loops until Claude is done, then ends together with the status text. No wandering,
     # dancing, or mischief meanwhile. Everyday poses are interrupted at once (bigger one-off
     # performances are left to finish; the transition picker keeps the loop going afterwards).
-    if (Test-ClaudeWorking) {
+    if (Test-AgentWorking) {
         if (-not $script:dragging -and $script:fx -eq 'none' -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none' -and ($script:everydayStates -contains $script:state)) {
             Start-WorkSession
         }
@@ -2659,7 +2676,7 @@ $script:timer.Add_Tick({
 
     if ($script:ticks -le 0) {
         # Claude still working -> keep looping the one chosen animation; never fall through to idle
-        if ((Test-ClaudeWorking) -and -not $script:dragging -and $script:fx -eq 'none' -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none') {
+        if ((Test-AgentWorking) -and -not $script:dragging -and $script:fx -eq 'none' -and $script:balMode -eq 'none' -and -not $script:starActive -and $script:shMode -eq 'none') {
             Start-WorkSession
             return
         }
@@ -2970,6 +2987,14 @@ Set-State 'idle' 150
 # Release the one-off sprite-processing garbage back to the OS before we settle in
 [System.GC]::Collect()
 [ClawdWin]::TrimMemory()
+if ($script:featWatch -and $script:featCodexWatch) {
+    $watcherPath = Join-Path $PSScriptRoot 'tools\codex-watch.ps1'
+    $script:codexWatcher = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$watcherPath`" -ParentId $PID -OutputPath `"$script:codexWatchFile`""
+}
 $script:timer.Start()
-[System.Windows.Forms.Application]::Run($script:form)
+try { [System.Windows.Forms.Application]::Run($script:form) }
+finally {
+    if ($script:codexWatcher -and -not $script:codexWatcher.HasExited) { $script:codexWatcher.Kill() }
+    if ([IO.File]::Exists($script:codexWatchFile)) { [IO.File]::Delete($script:codexWatchFile) }
+}
 $script:mutex.ReleaseMutex()

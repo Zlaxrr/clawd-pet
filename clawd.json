@@ -14,7 +14,8 @@
     "systemAwareness": true,
     "climbing": true,
     "mischief": true,
-    "claudeWatch": true
+    "claudeWatch": true,
+    "codexWatch": true
   },
   "terminal": {
     "command": "clawd --hello",
