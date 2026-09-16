@@ -28,7 +28,7 @@ Installs the hooks into your Claude Code settings and leaves everything else alo
 
 ## Codex Watch
 
-Clawd can also follow **Codex CLI**, alongside Claude Code. Run:
+Clawd can also follow **Codex CLI and Codex Desktop**, alongside Claude Code. Run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\codex-watch-on.ps1
@@ -62,8 +62,11 @@ Codex hooks + session JSONL -> adapter --+
 The UI reads shared tokens, not Codex tool names. Claude's existing
 `%TEMP%\clawd-status.txt` protocol and installer are unchanged. Codex uses one
 hidden Windows PowerShell worker, owned by Clawd, that tails recently modified
-`$CODEX_HOME\sessions\**\*.jsonl` files. It recognizes CLI/exec sessions and ignores
-Codex Desktop transcripts. No additional runtime or service is installed.
+`$CODEX_HOME\sessions\**\*.jsonl` files. It recognizes CLI/exec and main Codex
+Desktop sessions (currently `source: vscode`, `originator: Codex Desktop`). Internal
+guardian/subagent transcripts are excluded. Existing `codexWatch` installations
+only need a Clawd restart to add Desktop support; no extra hooks or configuration
+are required. No additional runtime or service is installed.
 
 | Codex activity | Token |
 |---|---|
@@ -134,7 +137,7 @@ Change anything, restart, done.
 | `size` | `80` | Width in px (48–200). Everything scales with it. |
 | `walkSpeed` / `gravity` | `1.0` | Speed and gravity multipliers |
 | `features.claudeWatch` | `true` | The Claude Code status bubble |
-| `features.codexWatch` | `false` when absent | Codex CLI adapter; setup enables it |
+| `features.codexWatch` | `false` when absent | Codex CLI + Desktop adapter; setup enables it |
 | `features.agentWatch` | `true` when absent | Master switch for both agents |
 | `features.eyeTracking` | `true` | Eyes follow the cursor |
 | `features.windowPlatforms` | `true` | Stand and ride on app windows |

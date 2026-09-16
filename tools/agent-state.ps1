@@ -101,11 +101,14 @@ function Read-ClawdCodexEvent($Row, $Cursor, $States) {
     $at = ([datetime]$Row.timestamp).ToUniversalTime()
     if ($Row.type -eq 'session_meta') {
         if ($p.id) { $Cursor.session = [string]$p.id }
-        # CLI only: Desktop shares the same session directory and must not drive this adapter.
-        $Cursor.cli = ($p.source -eq 'cli' -or $p.source -eq 'exec' -or $p.originator -match '^codex_(cli|exec)')
+        # Desktop currently labels its main sessions "vscode". Ignore internal
+        # guardian/subagent transcripts: their lifecycle must not outlive the main turn.
+        $Cursor.accepted = ($p.source -is [string]) -and (
+            $p.source -in @('cli','exec') -or
+            ($p.source -eq 'vscode' -and $p.originator -eq 'Codex Desktop'))
         return
     }
-    if (-not $Cursor.cli) { return }
+    if (-not $Cursor.accepted) { return }
     $token = ''
     if ($Row.type -eq 'turn_context' -and $p.turn_id) { $Cursor.turn = [string]$p.turn_id; return }
     if ($Row.type -eq 'event_msg') {

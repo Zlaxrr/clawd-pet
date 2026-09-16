@@ -37,15 +37,21 @@ try {
     $long = @([pscustomobject]@{source='claude';token='bash';at=$now.AddSeconds(-60)}, [pscustomobject]@{source='codex';token='done';at=$now})
     Assert ((Select-ClawdState $long $now 1800).token -eq 'bash') 'long Claude command survives Codex completion in dual-agent mode'
     Assert ((Select-ClawdState $long $now).token -eq 'done') 'Claude-only legacy timeout remains 15 seconds'
-    $cursor = @{cli=$false;session='';turn=''}; $parsed = @{}
+    $cursor = @{accepted=$false;session='';turn=''}; $parsed = @{}
     Read-ClawdCodexEvent @{timestamp=$now;type='session_meta';payload=@{id='test';source='cli'}} $cursor $parsed
     foreach ($pair in @(@('task_started','think'),@('exec_approval_request','notify'),@('task_complete','done'))) {
         Read-ClawdCodexEvent @{timestamp=$now;type='event_msg';payload=@{type=$pair[0];turn_id='one'}} $cursor $parsed
         Assert ($parsed.test.token -eq $pair[1]) "JSONL $($pair[0])"
     }
-    $cursor.cli=$false
-    Read-ClawdCodexEvent @{timestamp=$now;type='event_msg';payload=@{type='task_started'}} $cursor $parsed
-    Assert ($parsed.test.token -eq 'done') 'Desktop transcript ignored'
+    Read-ClawdCodexEvent @{timestamp=$now;type='session_meta';payload=@{id='desktop';source='vscode';originator='Codex Desktop'}} $cursor $parsed
+    Read-ClawdCodexEvent @{timestamp=$now;type='event_msg';payload=@{type='task_started';turn_id='desktop-turn'}} $cursor $parsed
+    Assert ($parsed.desktop.token -eq 'think') 'Desktop main session detected'
+    Assert ((Select-ClawdState $parsed.Values).session -eq 'desktop') 'CLI completion cannot stop active Desktop turn'
+    Read-ClawdCodexEvent @{timestamp=$now;type='event_msg';payload=@{type='task_complete';turn_id='desktop-turn'}} $cursor $parsed
+    Assert ($parsed.desktop.token -eq 'done') 'Desktop turn completes'
+    Read-ClawdCodexEvent @{timestamp=$now;type='session_meta';payload=@{id='guardian';source=@{subagent=@{other='guardian'}};originator='Codex Desktop'}} $cursor $parsed
+    Read-ClawdCodexEvent @{timestamp=$now;type='event_msg';payload=@{type='task_started';turn_id='guardian-turn'}} $cursor $parsed
+    Assert (-not $parsed.ContainsKey('guardian')) 'internal guardian transcript ignored'
 
     [IO.File]::WriteAllText($legacy,'edit')
     Assert ((Get-ClawdDisplayState $true $false $out $legacy).token -eq 'edit') 'legacy Claude token pipeline'
@@ -94,7 +100,7 @@ try {
         Assert ([IO.File]::Exists($lateOut)) 'watcher starts with an empty new session'
         $stamp = [datetime]::UtcNow.ToString('o')
         $lateRows = @(
-            @{timestamp=$stamp;type='session_meta';payload=@{id='late';source='cli'}},
+            @{timestamp=$stamp;type='session_meta';payload=@{id='late';source='vscode';originator='Codex Desktop'}},
             @{timestamp=$stamp;type='event_msg';payload=@{type='task_started';turn_id='late-turn'}}
         )
         [IO.File]::WriteAllText($late,(($lateRows | ForEach-Object {$_|ConvertTo-Json -Depth 8 -Compress}) -join "`n") + "`n")

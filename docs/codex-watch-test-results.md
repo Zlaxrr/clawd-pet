@@ -57,6 +57,25 @@ generation with `clawd-pet.ps1 -TestBlink` also passed.
 
 ## Fixes found by testing and remaining limits
 
+### Codex Desktop follow-up — 2026-09-16
+
+- Confirmed the current Desktop conversation's real metadata: `source: vscode`,
+  `originator: Codex Desktop`, CLI version `0.154.0-alpha.6.2`.
+- Restarted Clawd with the updated adapter. Its live snapshot contained this
+  conversation (`01a0a404-d1c0-7923-bd22-c11791b5e40a`) as active Codex `think`.
+  Render diagnostics reported `visible: true`; the saved bubble PNG reads
+  `thinking...`. No startup errors were recorded.
+- All automated checks passed, including Desktop start/completion, a CLI
+  completion while Desktop remains active, ignoring internal guardian sessions,
+  and a real watcher subprocess reading newly arriving Desktop metadata.
+- This live check verifies activity during the current conversation. Its final
+  completion cannot be observed before sending this response; Desktop completion
+  is covered by the event replay tests, not claimed as a live observation here.
+- No additional Codex configuration changes were needed. Diagnostic artifacts
+  are outside the repository: `ClawdPet-desktop-test.jsonl*`.
+
+### Existing CLI test findings
+
 - An existing call referenced a nonexistent `ClawdChime` class. It was removed.
   The user's pre-existing custom sound-generation changes remain intact.
 - The existing cached WAV failed playback. Audio exceptions previously prevented

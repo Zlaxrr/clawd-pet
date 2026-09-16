@@ -15,8 +15,8 @@ if ($Hook) {
     try {
         $p = [Console]::In.ReadToEnd() | ConvertFrom-Json
         if ([string]$p.session_id -notmatch '^[a-zA-Z0-9_-]{1,100}$') { exit 0 }
-        # Ignore Desktop hooks; lifecycle events have no originator in their payload.
-        # The watcher accepts these records only after identifying a CLI transcript.
+        # Lifecycle hooks have no originator in their payload. Accept records only
+        # after the watcher identifies a supported main CLI or Desktop transcript.
         $token = switch ($p.hook_event_name) {
             'UserPromptSubmit' { 'think' }
             'PreToolUse' { Get-ClawdToolToken $p.tool_name $p.tool_input }
@@ -57,7 +57,7 @@ while (-not $ParentId -or (Get-Process -Id $ParentId -ErrorAction SilentlyContin
             $fs = [IO.File]::Open($file.FullName, 'Open', 'Read', ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
             $c = $cursors[$file.FullName]
             if (-not $c -or $fs.Length -lt $c.offset) {
-                $c = @{offset=[long]0;session=$file.BaseName;turn='';cli=$false}
+                $c = @{offset=[long]0;session=$file.BaseName;turn='';accepted=$false}
                 $reader = New-Object IO.StreamReader($fs)
                 $first = $reader.ReadLine()
                 if (-not $first) { continue }
@@ -72,7 +72,7 @@ while (-not $ParentId -or (Get-Process -Id $ParentId -ErrorAction SilentlyContin
                     while (($b = $fs.ReadByte()) -ge 0) { $c.offset++; if ($b -eq 10) { break } }
                 }
             }
-            if (-not $c.cli) { continue }
+            if (-not $c.accepted) { continue }
             [void]$fs.Seek($c.offset, 'Begin')
             $count = [int][Math]::Min(524288, $fs.Length - $c.offset)
             if ($count -le 0) { continue }
@@ -95,11 +95,11 @@ while (-not $ParentId -or (Get-Process -Id $ParentId -ErrorAction SilentlyContin
             $c.offset += $last + 1 # Do not consume partial lines or split UTF-8 sequences.
         } catch { } finally { if ($reader) { $reader.Dispose() }; if ($fs) { $fs.Dispose() } }
     }
-    $cliIds = @($cursors.Values | Where-Object { $_.cli } | ForEach-Object { $_.session })
+    $sessionIds = @($cursors.Values | Where-Object { $_.accepted } | ForEach-Object { $_.session })
     foreach ($file in @(Get-ChildItem -LiteralPath $StateDirectory -Filter '*.json' -File -ErrorAction SilentlyContinue)) {
         try {
             $h = [IO.File]::ReadAllText($file.FullName) | ConvertFrom-Json
-            if ($h.session -in $cliIds) {
+            if ($h.session -in $sessionIds) {
                 Set-ClawdState $states $h.session 'codex' $h.token ([datetime]$h.at).ToUniversalTime() $h.turn
                 [IO.File]::Delete($file.FullName)
             } elseif ($file.LastWriteTimeUtc -lt [datetime]::UtcNow.AddMinutes(-2)) { [IO.File]::Delete($file.FullName) }
