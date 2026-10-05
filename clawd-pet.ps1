@@ -537,17 +537,18 @@ $script:termCmd   = [string](Get-Cfg 'terminal.command' 'clawd --hello')
 $script:termOut   = [string](Get-Cfg 'terminal.output' 'Hello, World!')
 
 # ---------- Official assets ----------
+. (Join-Path $PSScriptRoot 'tools\asset-validation.ps1')
 $assetDir = Join-Path $PSScriptRoot 'assets'
 $neededAssets = @('Clawd-Still.png', 'Clawd-CrabWalking.gif', 'Clawd-Waving.gif', 'Clawd-JumpingHappy.gif', 'Clawd-Lurking.gif',
-                  'Clawd-Dancing.gif', 'Clawd-Working.gif', 'Clawd-Loading.gif', 'Clawd-Cooking.gif')
-$missingAssets = @($neededAssets | Where-Object { -not (Test-Path (Join-Path $assetDir $_)) })
+                  'Clawd-Dancing.gif', 'Clawd-Working.gif', 'Clawd-Loading.gif', 'Clawd-Cooking.gif', 'Clawd-CookIntro.gif')
+$missingAssets = @($neededAssets | Where-Object { -not (Test-ClawdAsset (Join-Path $assetDir $_)) })
 if ($missingAssets.Count -gt 0) {
-    # Assets missing -> auto-download from claude.ai
+    # Missing or invalid assets -> download again before any image is loaded.
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'download-assets.ps1') | Out-Null
-    $missingAssets = @($neededAssets | Where-Object { -not (Test-Path (Join-Path $assetDir $_)) })
+    $missingAssets = @($neededAssets | Where-Object { -not (Test-ClawdAsset (Join-Path $assetDir $_)) })
     if ($missingAssets.Count -gt 0) {
         [void][System.Windows.Forms.MessageBox]::Show(
-            "Clawd's assets are incomplete (download failed):`n$($missingAssets -join "`n")`n`nRun download-assets.ps1 manually, then try again.",
+            "Clawd's assets are missing or invalid:`n$($missingAssets -join "`n")`n`nRun download-assets.ps1 manually or download a fresh copy of the repo, then try again.",
             'Clawd Pet', 'OK', 'Warning')
         exit
     }
@@ -587,7 +588,7 @@ $script:gifStates['cook']  = $script:imgCook;  $script:gifSrc['cook']  = (Get-Gi
 # Per-GIF size nudge on top of the idle-match scale (1.0 = match idle footprint). Cooking's
 # pan reaches out to the side, inflating its bounds, so its crab reads small - bump it to fill
 # the window. Clamped to the window afterwards, so it never clips.
-$script:gifScale = @{ 'cook' = 1.31 }
+$script:gifScale = @{ 'cook' = 1.4 }
 # Head anchor (centre x, top y) in each GIF's OWN pixel coords. These wide GIFs put Clawd's body
 # off-centre (the laptop / the reaching pan), so the status bubble is centred over this point
 # instead of the window centre - keeping it right above his head, not the middle of the GIF.
@@ -619,7 +620,8 @@ if ($TestBlink) {
 # ---------- Display size ----------
 $script:destW  = [Math]::Max(48, [Math]::Min(200, [int](Get-Cfg 'size' 80)))
 $script:destH  = [int](1499 / 1200 * $script:destW)   # ~100
-$script:margin = 12
+# Room for the pan/laptop while keeping the character centred in every pose.
+$script:margin = [int]($script:destW * 0.4)
 $script:formW  = $script:destW + 2 * $script:margin
 $script:crabH  = [int](800 * $script:destW / 1200)   # body height ~53 px
 # Square window while climbing: must fit the sprite at any rotation.
@@ -1585,6 +1587,8 @@ function Render-Pet($g) {
         $dy  = [int]($script:destH - $dh)
         if ($script:gifHead.ContainsKey($script:state)) {
             $ha = $script:gifHead[$script:state]
+            # Centre Clawd's head, rather than the full image including his props.
+            $dx = [int]($script:formW / 2.0 - ($ha[0] - $src.X) * $scale)
             $script:gifHeadX   = [int]($dx + ($ha[0] - $src.X) * $scale)
             $script:gifHeadTop = [int]($dy + ($ha[1] - $src.Y) * $scale)
         } else {

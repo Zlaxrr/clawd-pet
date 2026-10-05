@@ -1,8 +1,11 @@
-# Official Anthropic assets - downloaded by download-assets.ps1, never committed
-assets/
-# Custom assets bundled with the repo (not from Anthropic)
+# Most sprites are downloaded; preserve animations unavailable upstream.
+/assets/*
+# Bundled custom variants and preserved Anthropic animations.
 !assets/Clawd-CookIntro.gif
 !assets/Clawd-Dancing.gif
+!assets/Clawd-Working.gif
+!assets/Clawd-Cooking.gif
+!assets/Clawd-Loading.gif
 
 # Windows junk
 Thumbs.db

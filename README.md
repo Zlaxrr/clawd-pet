@@ -145,7 +145,7 @@ Change anything, restart, done.
 
 ## About the sprites
 
-Clawd and his artwork belong to **Anthropic** — pulled from claude.ai on first run, never bundled here. Fan project, not official, Anthropic had nothing to do with it.
+Clawd and his artwork belong to **Anthropic**. Most sprites are pulled from claude.ai on first run. Dance, Cook Intro, Working, Cooking, and Loading are preserved in this repo because some upstream URLs no longer return images. Downloads and existing files are checked as real PNG/GIF images before use; invalid files are downloaded again. Fan project, not official, Anthropic had nothing to do with it.
 
 ## License
 
