@@ -327,15 +327,16 @@ public static class ClawdFx {
 $script:chimeWav = Join-Path $env:TEMP 'clawd-chime.wav'
 if (-not (Test-Path $script:chimeWav)) {
     $sr = 22050
-    $notes = @(523, 659, 784, 1047); $durs = @(80, 80, 80, 180); $gapSamp = $sr * 25 / 1000
-    $totalSamp = 0; for ($i = 0; $i -lt $notes.Count; $i++) { $totalSamp += [long]($sr * $durs[$i] / 1000) + $gapSamp }
-    $raw = New-Object double[] $totalSamp; $pos = 0
-    for ($n = 0; $n -lt $notes.Count; $n++) {
-        $freq = $notes[$n]; $samples = [long]($sr * $durs[$n] / 1000)
-        for ($s = 0; $s -lt $samples; $s++) { $raw[$pos++] = [Math]::Sin(2 * [Math]::PI * $freq * $s / $sr) * 0.35 }
-        for ($s = 0; $s -lt $gapSamp; $s++) { $raw[$pos++] = 0 }
+    # Phone notification: single warm tone with quick attack, trailing release
+    $durMs = 280; $samples = [long]($sr * $durMs / 1000); $atSamp = [long]($sr * 0.008); $relSamp = [long]($sr * 0.200)
+    $raw = New-Object double[] $samples
+    for ($s = 0; $s -lt $samples; $s++) {
+        $v = ([Math]::Sin(2 * [Math]::PI * 830 * $s / $sr)) * 0.25
+        if ($s -lt $atSamp) { $v *= [double]$s / $atSamp }
+        if ($s -ge $samples - $relSamp) { $v *= [double]($samples - $s) / $relSamp }
+        $raw[$s] = $v
     }
-    $dataBytes = [int]($totalSamp * 2)
+    $dataBytes = $samples * 2
     $fs = [System.IO.File]::Create($script:chimeWav)
     $w = New-Object System.IO.BinaryWriter($fs)
     $w.Write([char[]]('RIFF')); $w.Write(36 + $dataBytes)
@@ -343,7 +344,7 @@ if (-not (Test-Path $script:chimeWav)) {
     $w.Write([uint16]1); $w.Write([uint16]1); $w.Write($sr); $w.Write($sr * 2)
     $w.Write([uint16]2); $w.Write([uint16]16)
     $w.Write([char[]]('data')); $w.Write($dataBytes)
-    for ($i = 0; $i -lt $totalSamp; $i++) { $w.Write([int16]($raw[$i] * 32767)) }
+    for ($i = 0; $i -lt $samples; $i++) { $w.Write([int16]($raw[$i] * 32767)) }
     $w.Close(); $fs.Close()
     $raw = $null
 }
@@ -2786,10 +2787,17 @@ $script:timer.Add_Tick({
         }
     }
 
-    # Power saving: while calm (idle with no effect), repaint at 30 fps is enough -
-    # breathing & eye motion are too slow to tell the difference
-    $calm = ($script:state -eq 'idle' -and $script:fx -eq 'none' -and $script:qmTicks -le 0 -and -not $script:dragging)
-    if (-not $calm -or ($script:globalT % 2) -eq 0) { Update-PetVisual }
+    # Power saving: while calm (idle, nothing moving, no watch bubble) run the WHOLE
+    # tick at 30 Hz instead of 60 - halves the interpreted-loop CPU, not just the
+    # repaint. Back to 60 Hz the instant anything moves (walk/fall/drag/fx) or a
+    # Claude Watch bubble is on screen, so nothing animated ever looks choppy.
+    # ponytail: resting timers (breathe/blink/idle-wander) advance ~half as fast while
+    # calm - benign for a pet at rest. If exact wall-clock timing matters, halve those
+    # counters on calm ticks or add a config knob.
+    $calm = ($script:state -eq 'idle' -and $script:fx -eq 'none' -and $script:qmTicks -le 0 -and -not $script:dragging -and $script:watchVis -le 0.001)
+    $wantInterval = if ($calm) { 33 } else { 16 }
+    if ($script:timer.Interval -ne $wantInterval) { $script:timer.Interval = $wantInterval }
+    Update-PetVisual
 
     $script:topCnt++
     if ($script:topCnt -ge 600) { $script:topCnt = 0; $script:form.TopMost = $true }
