@@ -2794,7 +2794,7 @@ $script:timer.Add_Tick({
     # ponytail: resting timers (breathe/blink/idle-wander) advance ~half as fast while
     # calm - benign for a pet at rest. If exact wall-clock timing matters, halve those
     # counters on calm ticks or add a config knob.
-    $calm = ($script:state -eq 'idle' -and $script:fx -eq 'none' -and $script:qmTicks -le 0 -and -not $script:dragging -and $script:watchVis -le 0.001)
+    $calm = ($script:state -eq 'idle' -and ($script:fx -eq 'none' -or $script:fx -eq 'doze') -and $script:qmTicks -le 0 -and -not $script:dragging -and $script:watchVis -le 0.001)
     $wantInterval = if ($calm) { 33 } else { 16 }
     if ($script:timer.Interval -ne $wantInterval) { $script:timer.Interval = $wantInterval }
     Update-PetVisual
